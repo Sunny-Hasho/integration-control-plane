@@ -726,6 +726,7 @@ isolated function insertRuntimeArtifacts(string runtimeId, types:Heartbeat heart
         types:Main? mainArtifact = heartbeat.artifacts.main;
         if mainArtifact is types:Main {
             string executionTimeStr = check convertUtcToDbDateTime(heartbeat.timestamp);
+            string executionId = uuid:createType4AsString();
             if dbType == POSTGRESQL {
                 _ = check dbClient->execute(`
                     INSERT INTO bi_automation_artifacts (
@@ -735,12 +736,28 @@ isolated function insertRuntimeArtifacts(string runtimeId, types:Heartbeat heart
                         ${mainArtifact.packageVersion}, ${executionTimeStr}::timestamp
                     )
                 `);
+                _ = check dbClient->execute(`
+                    INSERT INTO bi_automation_execution_history (
+                        execution_id, runtime_id, package_org, package_name, package_version, execution_timestamp
+                    ) VALUES (
+                        ${executionId}, ${runtimeId}, ${mainArtifact.packageOrg}, ${mainArtifact.packageName},
+                        ${mainArtifact.packageVersion}, ${executionTimeStr}::timestamp
+                    )
+                `);
             } else {
                 _ = check dbClient->execute(`
                     INSERT INTO bi_automation_artifacts (
                         runtime_id, package_org, package_name, package_version, execution_timestamp
                     ) VALUES (
                         ${runtimeId}, ${mainArtifact.packageOrg}, ${mainArtifact.packageName},
+                        ${mainArtifact.packageVersion}, ${executionTimeStr}
+                    )
+                `);
+                _ = check dbClient->execute(`
+                    INSERT INTO bi_automation_execution_history (
+                        execution_id, runtime_id, package_org, package_name, package_version, execution_timestamp
+                    ) VALUES (
+                        ${executionId}, ${runtimeId}, ${mainArtifact.packageOrg}, ${mainArtifact.packageName},
                         ${mainArtifact.packageVersion}, ${executionTimeStr}
                     )
                 `);
@@ -759,6 +776,7 @@ isolated function deleteExistingArtifacts(string runtimeId) returns error? {
     _ = check dbClient->execute(`DELETE FROM bi_runtime_listener_artifacts WHERE runtime_id = ${runtimeId}`);
     _ = check dbClient->execute(`DELETE FROM bi_service_resource_artifacts WHERE runtime_id = ${runtimeId}`);
     _ = check dbClient->execute(`DELETE FROM bi_automation_artifacts WHERE runtime_id = ${runtimeId}`);
+    _ = check dbClient->execute(`DELETE FROM bi_automation_execution_history WHERE runtime_id = ${runtimeId}`);
     _ = check dbClient->execute(`DELETE FROM bi_runtime_log_levels WHERE runtime_id = ${runtimeId}`);
     _ = check dbClient->execute(`DELETE FROM mi_api_resource_artifacts WHERE runtime_id = ${runtimeId}`);
     _ = check dbClient->execute(`DELETE FROM mi_api_artifacts WHERE runtime_id = ${runtimeId}`);

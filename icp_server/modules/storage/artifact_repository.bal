@@ -274,7 +274,7 @@ public isolated function getAutomationsByEnvironmentAndComponent(string environm
     inClause = sql:queryConcat(inClause, `)`);
 
     // Query for all automation artifacts and collect data in one pass
-    sql:ParameterizedQuery query = sql:queryConcat(`
+    sql:ParameterizedQuery snapshotQuery = sql:queryConcat(`
         SELECT 
             runtime_id,
             package_org,
@@ -287,12 +287,26 @@ public isolated function getAutomationsByEnvironmentAndComponent(string environm
     `);
 
     // Use a record type that includes runtime_id to capture all fields
-    stream<record {|string runtime_id; string package_org; string package_name; string package_version; string execution_timestamp;|}, sql:Error?> automationStream = dbClient->query(query);
+    stream<record {|string runtime_id; string package_org; string package_name; string package_version; string execution_timestamp;|}, sql:Error?> snapshotStream = dbClient->query(snapshotQuery);
+
+    sql:ParameterizedQuery historyQuery = sql:queryConcat(`
+        SELECT
+            runtime_id,
+            package_org,
+            package_name,
+            package_version,
+            execution_timestamp
+        FROM bi_automation_execution_history
+        WHERE runtime_id IN `, inClause, `
+        ORDER BY package_org, package_name, package_version, execution_timestamp DESC
+    `);
+
+    stream<record {|string runtime_id; string package_org; string package_name; string package_version; string execution_timestamp;|}, sql:Error?> historyStream = dbClient->query(historyQuery);
 
     // Build nested map: automationKey -> runtimeId -> execution_timestamps[]
     map<map<string[]>> automationRuntimeExecutions = {};
 
-    check from record {|string runtime_id; string package_org; string package_name; string package_version; string execution_timestamp;|} row in automationStream
+    check from record {|string runtime_id; string package_org; string package_name; string package_version; string execution_timestamp;|} row in snapshotStream
         do {
             // Create a unique key for each package (org + name + version)
             string key = string `${row.package_org}:${row.package_name}:${row.package_version}`;
@@ -311,9 +325,26 @@ public isolated function getAutomationsByEnvironmentAndComponent(string environm
             // Get or create the runtime executions map for this automation
             map<string[]> runtimeExecs = automationRuntimeExecutions[key] ?: {};
             string[] existingTimestamps = runtimeExecs[row.runtime_id] ?: [];
-            existingTimestamps.push(row.execution_timestamp);
+            if existingTimestamps.indexOf(row.execution_timestamp) is () {
+                existingTimestamps.push(row.execution_timestamp);
+            }
             runtimeExecs[row.runtime_id] = existingTimestamps;
             automationRuntimeExecutions[key] = runtimeExecs;
+        };
+
+    check from record {|string runtime_id; string package_org; string package_name; string package_version; string execution_timestamp;|} row in historyStream
+        do {
+            string key = string `${row.package_org}:${row.package_name}:${row.package_version}`;
+
+            if automationMap.hasKey(key) {
+                map<string[]> runtimeExecs = automationRuntimeExecutions[key] ?: {};
+                string[] existingTimestamps = runtimeExecs[row.runtime_id] ?: [];
+                if existingTimestamps.indexOf(row.execution_timestamp) is () {
+                    existingTimestamps.push(row.execution_timestamp);
+                }
+                runtimeExecs[row.runtime_id] = existingTimestamps;
+                automationRuntimeExecutions[key] = runtimeExecs;
+            }
         };
 
     // Convert map to array and attach runtime info using the pre-collected data

@@ -632,6 +632,21 @@ CREATE TABLE bi_automation_artifacts (
     INDEX idx_execution_timestamp (execution_timestamp)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
+CREATE TABLE bi_automation_execution_history (
+    execution_id CHAR(36) NOT NULL,
+    runtime_id CHAR(36) NOT NULL,
+    package_org VARCHAR(200) NOT NULL,
+    package_name VARCHAR(200) NOT NULL,
+    package_version VARCHAR(50) NOT NULL,
+    execution_timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (execution_id),
+    CONSTRAINT fk_bi_automation_execution_history_runtime FOREIGN KEY (runtime_id) REFERENCES runtimes (runtime_id) ON DELETE CASCADE,
+    INDEX idx_runtime_id (runtime_id),
+    INDEX idx_package_name (package_name),
+    INDEX idx_execution_timestamp (execution_timestamp)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
 -- Runtime log levels for BI components
 CREATE TABLE bi_runtime_log_levels (
     runtime_id CHAR(36) NOT NULL,

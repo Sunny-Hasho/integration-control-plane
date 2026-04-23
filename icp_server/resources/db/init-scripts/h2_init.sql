@@ -811,6 +811,24 @@ CREATE INDEX idx_bi_automation_artifacts_package_name ON bi_automation_artifacts
 
 CREATE INDEX idx_bi_automation_artifacts_execution_timestamp ON bi_automation_artifacts (execution_timestamp);
 
+CREATE TABLE bi_automation_execution_history (
+    execution_id CHAR(36) NOT NULL,
+    runtime_id CHAR(36) NOT NULL,
+    package_org VARCHAR(200) NOT NULL,
+    package_name VARCHAR(200) NOT NULL,
+    package_version VARCHAR(50) NOT NULL,
+    execution_timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (execution_id),
+    CONSTRAINT fk_bi_automation_execution_history_runtime FOREIGN KEY (runtime_id) REFERENCES runtimes (runtime_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_bi_automation_execution_history_runtime_id ON bi_automation_execution_history (runtime_id);
+
+CREATE INDEX idx_bi_automation_execution_history_package_name ON bi_automation_execution_history (package_name);
+
+CREATE INDEX idx_bi_automation_execution_history_execution_timestamp ON bi_automation_execution_history (execution_timestamp);
+
 -- Runtime log levels for BI components
 CREATE TABLE bi_runtime_log_levels (
     runtime_id CHAR(36) NOT NULL,
