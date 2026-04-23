@@ -301,8 +301,22 @@ public isolated function resolveOrCreateProject(string handler, string? createdB
                 VALUES (${adminGroupId}, ${groupName}, ${DEFAULT_ORG_ID}, ${string `Admin group for project: ${handler}`})
             `);
             if groupRes is sql:Error {
-                log:printError(string `resolveOrCreateProject: failed to create admin group for handler=${handler}`, 'error = groupRes);
-                fail error("Failed to set up project admin group", groupRes);
+                if classifySqlError(groupRes) == DUPLICATE_KEY {
+                    record {|string group_id;|}|sql:Error existingGroup = dbClient->queryRow(`
+                        SELECT group_id FROM user_groups
+                        WHERE group_name = ${groupName} AND org_uuid = ${DEFAULT_ORG_ID}
+                    `);
+                    if existingGroup is record {|string group_id;|} {
+                        adminGroupId = existingGroup.group_id;
+                        log:printWarn(string `resolveOrCreateProject: reusing existing admin group for handler=${handler}`, groupId = adminGroupId);
+                    } else {
+                        log:printError(string `resolveOrCreateProject: duplicate admin group but lookup failed for handler=${handler}`, 'error = existingGroup);
+                        fail error("Failed to resolve duplicate project admin group", existingGroup);
+                    }
+                } else {
+                    log:printError(string `resolveOrCreateProject: failed to create admin group for handler=${handler}`, 'error = groupRes);
+                    fail error("Failed to set up project admin group", groupRes);
+                }
             }
 
             string roleId = check getProjectAdminRoleId();
@@ -322,8 +336,12 @@ public isolated function resolveOrCreateProject(string handler, string? createdB
                     VALUES (${adminGroupId}, ${createdBy})
                 `);
                 if userRes is sql:Error {
-                    log:printError(string `resolveOrCreateProject: failed to add creator to admin group for handler=${handler}`, 'error = userRes);
-                    fail error("Failed to add user to project admin group", userRes);
+                    if classifySqlError(userRes) == DUPLICATE_KEY {
+                        log:printWarn(string `resolveOrCreateProject: creator already belongs to admin group for handler=${handler}`, groupId = adminGroupId, userId = createdBy);
+                    } else {
+                        log:printError(string `resolveOrCreateProject: failed to add creator to admin group for handler=${handler}`, 'error = userRes);
+                        fail error("Failed to add user to project admin group", userRes);
+                    }
                 }
             }
 
