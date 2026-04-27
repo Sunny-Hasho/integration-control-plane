@@ -41,10 +41,12 @@ import {
   Tabs,
   Typography,
 } from '@wso2/oxygen-ui';
-import { Check, Copy, FileText, Key, Plus, RefreshCw, Server, Trash2, X } from '@wso2/oxygen-ui-icons-react';
-import { useCallback, useEffect, useState, type JSX } from 'react';
-import { useQueries } from '@tanstack/react-query';
+import { FileText, Key, Plus, RefreshCw, Server, Trash2, X } from '@wso2/oxygen-ui-icons-react';
+import CodeBoxWithCopy from '../components/CodeBoxWithCopy';
+import { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router';
+import type { JSX } from 'react';
+import { useQueries } from '@tanstack/react-query';
 import { gql } from '../api/graphql';
 import { useAllEnvironments, useOrgSecrets, ORG_RUNTIMES_QUERY, type GqlEnvironment, type GqlRuntime } from '../api/queries';
 import { useCreateOrgSecret, useDeleteRuntime, useRevokeOrgSecret } from '../api/mutations';
@@ -153,7 +155,7 @@ project = "<project name>"
 integration = "<integration name>"
 runtime = "<unique id for the runtime>"
 secret = "${secret}"
-# icp_url = "https://<hostname>:9445"`;
+#icp_url = "https://<hostname>:9445"`;
 }
 
 function biToml(envName: string, secret: string): string {
@@ -163,14 +165,13 @@ project = "<project name>"
 integration = "<integration name>"
 runtime = "<unique id for the runtime>"
 secret = "${secret}"
-# serverUrl="https://<hostname>:9445"`;
+#serverUrl="https://<hostname>:9445"`;
 }
 
 function AddRuntimeModal({ env, onClose }: { env: GqlEnvironment; onClose: () => void }) {
   const createMutation = useCreateOrgSecret();
   const [secret, setSecret] = useState<string | null>(null);
   const [tab, setTab] = useState(0);
-  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleGenerate = () => {
@@ -185,13 +186,6 @@ function AddRuntimeModal({ env, onClose }: { env: GqlEnvironment; onClose: () =>
   };
 
   const config = secret ? (tab === 0 ? biToml(env.handler, secret) : miToml(env.handler, secret)) : null;
-
-  const handleCopy = async () => {
-    if (!config) return;
-    await navigator.clipboard.writeText(config);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
@@ -224,27 +218,25 @@ function AddRuntimeModal({ env, onClose }: { env: GqlEnvironment; onClose: () =>
               <Tab label="MI" />
             </Tabs>
             <DialogContentText sx={{ mb: 1 }}>
-              Add the following configuration to your runtime's <strong>{tab === 0 ? 'Config.toml' : 'deployment.toml'}</strong> file:
+              Add the following configuration to your runtime's <strong>{tab === 0 ? 'Config.toml' : 'deployment.toml'}</strong> file. Change the <strong>project, integration and runtime</strong> values as needed. The runtime value must be unique for each
+              runtime you register.
             </DialogContentText>
-            <Box sx={{ position: 'relative' }}>
-              <Box
-                component="pre"
-                sx={{
-                  p: 2,
-                  bgcolor: 'action.hover',
-                  borderRadius: 1,
-                  overflow: 'auto',
-                  fontSize: 13,
-                  fontFamily: 'monospace',
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-all',
-                }}>
-                {config}
-              </Box>
-              <IconButton size="small" onClick={handleCopy} sx={{ position: 'absolute', top: 8, right: 8 }} aria-label="Copy">
-                {copied ? <Check size={16} /> : <Copy size={16} />}
-              </IconButton>
-            </Box>
+            {config && <CodeBoxWithCopy code={config} />}
+            {tab === 0 && (
+              <>
+                <DialogContentText sx={{ mb: 1 }}>
+                  Add the following configuration to your runtime's <strong>Ballerina.toml</strong> file:
+                </DialogContentText>
+                <CodeBoxWithCopy code={`[build-options]\nremoteManagement = true`} />
+                <DialogContentText sx={{ mb: 1 }}>
+                  Import wso2/icp.runtime.bridge to your runtime's <strong>main.bal</strong> file:
+                </DialogContentText>
+                <CodeBoxWithCopy code={`import wso2/icp.runtime.bridge as _;`} />
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  The above configuration is for runtimes using the <strong>BI</strong> integration. If you're using the <strong>MI</strong> integration, switch to the MI tab to see the correct configuration.
+                </Alert>
+              </>
+            )}
           </>
         )}
       </DialogContent>

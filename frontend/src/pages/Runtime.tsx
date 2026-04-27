@@ -41,7 +41,8 @@ import {
   TablePagination,
   Typography,
 } from '@wso2/oxygen-ui';
-import { Check, Copy, FileText, Key, Plus, RefreshCw, Trash2, X } from '@wso2/oxygen-ui-icons-react';
+import { FileText, Key, Plus, RefreshCw, Trash2, X } from '@wso2/oxygen-ui-icons-react';
+import CodeBoxWithCopy from '../components/CodeBoxWithCopy';
 import SearchField from '../components/SearchField';
 import { LogFilesDrawer } from '../components/LogFilesDrawer';
 import { useCallback, useEffect, useState, type JSX } from 'react';
@@ -110,7 +111,6 @@ function AddRuntimeModal({
   const createMutation = useCreateOrgSecret();
   const queryClient = useQueryClient();
   const [secret, setSecret] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isBI = componentType === 'BI';
 
@@ -131,13 +131,6 @@ function AddRuntimeModal({
   };
 
   const config = secret ? (isBI ? biToml(environmentName, secret, projectHandle, integrationHandle) : miToml(environmentName, secret, projectHandle, integrationHandle)) : null;
-
-  const handleCopy = async () => {
-    if (!config) return;
-    await navigator.clipboard.writeText(config);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   const handleDialogClose = (_event: unknown, reason: string) => {
     if (createMutation.isPending && (reason === 'backdropClick' || reason === 'escapeKeyDown')) return;
@@ -171,27 +164,21 @@ function AddRuntimeModal({
               Copy this secret now. It will not be shown again.
             </Alert>
             <DialogContentText sx={{ mb: 1 }}>
-              Add the following configuration to your runtime's <strong>{isBI ? 'Config.toml' : 'deployment.toml'}</strong> file:
+              Add the following configuration to your runtime's <strong>{isBI ? 'Config.toml' : 'deployment.toml'}</strong> file. Change the <strong>runtime</strong> value; it must be unique for each registered runtime.
             </DialogContentText>
-            <Box sx={{ position: 'relative' }}>
-              <Box
-                component="pre"
-                sx={{
-                  p: 2,
-                  bgcolor: 'action.hover',
-                  borderRadius: 1,
-                  overflow: 'auto',
-                  fontSize: 13,
-                  fontFamily: 'monospace',
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-all',
-                }}>
-                {config}
-              </Box>
-              <IconButton size="small" onClick={handleCopy} sx={{ position: 'absolute', top: 8, right: 8 }} aria-label="Copy">
-                {copied ? <Check size={16} /> : <Copy size={16} />}
-              </IconButton>
-            </Box>
+            {config && <CodeBoxWithCopy code={config} />}
+            {isBI && (
+              <>
+                <DialogContentText sx={{ mb: 1 }}>
+                  Add the following configuration to your runtime's <strong>Ballerina.toml</strong> file:
+                </DialogContentText>
+                <CodeBoxWithCopy code={`[build-options]\nremoteManagement = true`} />
+                <DialogContentText sx={{ mb: 1 }}>
+                  Import wso2/icp.runtime.bridge to your runtime's <strong>main.bal</strong> file:
+                </DialogContentText>
+                <CodeBoxWithCopy code={`import wso2/icp.runtime.bridge as _;`} />
+              </>
+            )}
           </>
         )}
       </DialogContent>
