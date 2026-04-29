@@ -124,6 +124,10 @@ type Query {
     environmentId: String!
     componentId: String!
   ): [CarbonApp!]!
+  carbonAppFaultStackTrace(
+    runtimeId: String!
+    appName: String!
+  ): CarbonAppFaultStackTrace
   connectorsByEnvironmentAndComponent(
     environmentId: String!
     componentId: String!
@@ -514,8 +518,15 @@ type CarbonApp {
   version: String
   state: String!
   errorMessage: String
+  faultStackTrace: String
   artifacts: [CarbonAppArtifact!]
   runtimes: [ArtifactRuntimeInfo]
+}
+
+type CarbonAppFaultStackTrace {
+  runtimeId: String!
+  appName: String!
+  faultStackTrace: String!
 }
 
 # ============================================

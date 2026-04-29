@@ -647,6 +647,7 @@ public isolated function getDataServicesForRuntime(string runtimeId) returns typ
 
 // Get carbon apps for a specific runtime
 public isolated function getCarbonAppsForRuntime(string runtimeId) returns types:CarbonApp[]|error {
+    log:printDebug("Fetching carbon apps for runtime: " + runtimeId);
     types:CarbonApp[] appList = [];
     // Include artifacts column (serialized JSON string) if present
     stream<record {string app_name; string version; types:DeploymentState state; string? error_message?; string artifacts?;}, sql:Error?> appStream = dbClient->query(`
@@ -665,6 +666,7 @@ public isolated function getCarbonAppsForRuntime(string runtimeId) returns types
             };
             if appRecord.artifacts is string {
                 // Attempt to parse JSON string to CarbonAppArtifact[]
+                log:printDebug("Parsing artifacts for carbon app: " + appRecord.app_name + " version: " + appRecord.version);
                 string artStr = <string>appRecord.artifacts;
                 json|error parsed = value:fromJsonString(artStr);
                 if parsed is json {

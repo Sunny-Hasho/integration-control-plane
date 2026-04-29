@@ -298,6 +298,45 @@ SET @sql = N'
 EXEC sp_executesql @sql;
 PRINT 'org_secrets table and runtimes.key_id created.';
 
+SET @sql = N'
+    IF OBJECT_ID(N''[' + @new_main_db + N'].[dbo].[mi_carbon_app_artifacts]'', N''U'') IS NULL
+    BEGIN
+        CREATE TABLE [' + @new_main_db + N'].[dbo].[mi_carbon_app_artifacts] (
+            runtime_id CHAR(36) NOT NULL,
+            app_name NVARCHAR(200) NOT NULL,
+            version NVARCHAR(50) NULL,
+            state NVARCHAR(20) NOT NULL DEFAULT ''Active'' CHECK (state IN (''Active'', ''Faulty'')),
+            error_message NVARCHAR(MAX) NULL,
+            artifacts NVARCHAR(4000) NULL,
+            created_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+            updated_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+            PRIMARY KEY (runtime_id, app_name),
+            CONSTRAINT fk_mi_carbon_app_artifacts_runtime FOREIGN KEY (runtime_id) REFERENCES [' + @new_main_db + N'].[dbo].[runtimes] (runtime_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX idx_runtime_id ON [' + @new_main_db + N'].[dbo].[mi_carbon_app_artifacts] (runtime_id);
+        CREATE INDEX idx_app_name ON [' + @new_main_db + N'].[dbo].[mi_carbon_app_artifacts] (app_name);
+        CREATE INDEX idx_state ON [' + @new_main_db + N'].[dbo].[mi_carbon_app_artifacts] (state);
+
+        EXEC (N''
+            CREATE TRIGGER trg_mi_carbon_app_artifacts_updated_at
+            ON [' + @new_main_db + N'].[dbo].[mi_carbon_app_artifacts]
+            AFTER UPDATE
+            AS
+            BEGIN
+                SET NOCOUNT ON;
+                UPDATE [' + @new_main_db + N'].[dbo].[mi_carbon_app_artifacts]
+                SET updated_at = GETDATE()
+                FROM [' + @new_main_db + N'].[dbo].[mi_carbon_app_artifacts] rca
+                INNER JOIN inserted i ON rca.runtime_id = i.runtime_id
+                    AND rca.app_name = i.app_name;
+            END;
+        '');
+    END
+';
+EXEC sp_executesql @sql;
+PRINT 'mi_carbon_app_artifacts table ensured.';
+
 -- ============================================================================
 -- STEP 4 — Summary report
 -- ============================================================================

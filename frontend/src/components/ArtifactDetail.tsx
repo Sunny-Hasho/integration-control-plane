@@ -470,6 +470,7 @@ export function ArtifactDetail({ selected, onClose }: { selected: SelectedArtifa
 
   const isFaultyCarbon = artifactType === 'CarbonApp' && artifact.state?.toString() === 'Faulty';
   const errorMessage = isFaultyCarbon ? artifact.errorMessage?.toString() : null;
+  const stacktracePanelId = `stacktrace-panel-${artifactType}-${displayName.replace(/\s+/g, '-').toLowerCase()}`;
   const errorLines = errorMessage
     ? errorMessage
         .split('\n')
@@ -545,19 +546,37 @@ export function ArtifactDetail({ selected, onClose }: { selected: SelectedArtifa
               </Box>
 
               <Box>
-                <Stack direction="row" alignItems="center" gap={0.5} sx={{ cursor: 'pointer', py: 0.5 }} onClick={handleStacktraceToggle}>
+                <Box
+                  component="button"
+                  type="button"
+                  onClick={handleStacktraceToggle}
+                  aria-expanded={stacktraceExpanded}
+                  aria-controls={stacktracePanelId}
+                  sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                    cursor: 'pointer',
+                    py: 0.5,
+                    px: 0,
+                    border: 0,
+                    background: 'none',
+                    color: 'inherit',
+                    textAlign: 'left',
+                  }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.primary' }}>
                     Stacktrace
                   </Typography>
                   <ChevronDown size={16} style={{ transform: stacktraceExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 120ms ease' }} />
-                </Stack>
+                </Box>
                 {stacktraceExpanded &&
                   (stacktraceLoading ? (
-                    <Typography variant="body2" color="text.secondary" sx={{ p: 1 }}>
+                    <Typography id={stacktracePanelId} variant="body2" color="text.secondary" sx={{ p: 1 }}>
                       Loading stacktrace...
                     </Typography>
                   ) : (
                     <Box
+                      id={stacktracePanelId}
                       component="pre"
                       sx={{
                         m: 0,

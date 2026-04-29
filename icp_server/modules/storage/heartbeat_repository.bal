@@ -480,6 +480,7 @@ isolated function writeObservedStateMI(string runtimeId, string componentId, str
     }
     foreach types:CarbonApp app in <types:CarbonApp[]>artifacts.carbonApps {
         string appState = normalizeCarbonAppState(app.status ?: app.state);
+        log:printDebug(string `Processing carbon app: ${app.name} with state: ${appState}`);
         entries.push([{artifactName: app.name, artifactType: "carbon-app"}, {"status": appState}]);
     }
     check batchUpsertReconcileObservedState(runtimeId, componentId, envId, entries);
@@ -1486,6 +1487,7 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
 
     foreach types:CarbonApp app in <types:CarbonApp[]>heartbeat.artifacts.carbonApps {
         string appState = normalizeCarbonAppState(app.status ?: app.state);
+        log:printDebug(string `Inserting/updating carbon app artifact: ${app.name}, version: ${app.version ?: ""}, state: ${appState}`);
         string? artifactsJson = app.artifacts is types:CarbonAppArtifact[]
             ? (<types:CarbonAppArtifact[]>app.artifacts).toJsonString()
             : ();
@@ -1664,8 +1666,15 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
 }
 
 isolated function normalizeCarbonAppState(string state) returns string {
-    string normalized = state.trim().toLowerAscii();
-    return normalized == "faulty" ? "Faulty" : "Active";
+    string trimmed = state.trim();
+    string normalized = trimmed.toLowerAscii();
+    if normalized == "faulty" {
+        return "Faulty";
+    }
+    if normalized == "active" {
+        return "Active";
+    }
+    return trimmed == "" ? "Unknown" : trimmed;
 }
 
 // Insert runtime log levels for BI components

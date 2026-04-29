@@ -341,6 +341,27 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 SET @sql = CONCAT('
+    CREATE TABLE IF NOT EXISTS `', @new_main_db, '`.mi_carbon_app_artifacts (
+        runtime_id CHAR(36) NOT NULL,
+        app_name VARCHAR(200) NOT NULL,
+        version VARCHAR(50) NULL,
+        state ENUM(''Active'', ''Faulty'') NOT NULL DEFAULT ''Active'',
+        error_message TEXT NULL,
+        artifacts VARCHAR(4000) NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (runtime_id, app_name),
+        CONSTRAINT fk_mi_carbon_app_artifacts_runtime FOREIGN KEY (runtime_id) REFERENCES `', @new_main_db, '`.runtimes (runtime_id) ON DELETE CASCADE,
+        INDEX idx_runtime_id (runtime_id),
+        INDEX idx_app_name (app_name),
+        INDEX idx_state (state)
+    ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci
+');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = CONCAT('
     ALTER TABLE `', @new_main_db, '`.runtimes
         ADD COLUMN key_id VARCHAR(16) NULL,
         ADD CONSTRAINT fk_runtime_key_id FOREIGN KEY (key_id)

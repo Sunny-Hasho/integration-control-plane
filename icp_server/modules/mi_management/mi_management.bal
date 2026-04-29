@@ -529,6 +529,11 @@ public isolated function fetchCarbonAppFaultStackTrace(http:Client mgmtClient, s
     });
     string? stackTrace = respResult?.faultStackTrace;
     if stackTrace is () {
+        log:printWarn("No fault stack trace found for Carbon App", appName = appName);
+        return error(string `No fault stack trace available for Carbon App: ${appName}`);
+    }
+    if stackTrace.trim().length() == 0 {
+        log:printWarn("Empty fault stack trace found for Carbon App", appName = appName);
         return error(string `No fault stack trace available for Carbon App: ${appName}`);
     }
     return stackTrace;
