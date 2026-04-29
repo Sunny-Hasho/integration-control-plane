@@ -527,7 +527,7 @@ export function ArtifactDetail({ selected, onClose }: { selected: SelectedArtifa
           </IconButton>
         </Stack>
       </Stack>
-      {(errorMessage || stacktraceLoading || stacktrace || stacktraceExpanded) && (
+      {(isFaultyCarbon || errorMessage || stacktraceLoading || stacktrace || stacktraceExpanded) && (
         <Box sx={{ px: 2, pt: 1.5, pb: 3, backgroundColor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}>
           <Stack spacing={0} alignItems="flex-start">
             <Chip label="Faulty" size="small" color="error" sx={{ mt: 0.5 }} />
