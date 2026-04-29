@@ -527,23 +527,25 @@ export function ArtifactDetail({ selected, onClose }: { selected: SelectedArtifa
           </IconButton>
         </Stack>
       </Stack>
-      {errorMessage && (
+      {(errorMessage || stacktraceLoading || stacktrace || stacktraceExpanded) && (
         <Box sx={{ px: 2, pt: 1.5, pb: 3, backgroundColor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}>
           <Stack spacing={0} alignItems="flex-start">
             <Chip label="Faulty" size="small" color="error" sx={{ mt: 0.5 }} />
             <Stack spacing={1.5} sx={{ width: '100%', minWidth: 0, mt: 3 }}>
-              <Box>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, display: 'block', mb: 0.75, color: 'text.primary' }}>
-                  Error Message
-                </Typography>
-                <Box sx={{ m: 0 }}>
-                  {(errorLines.length > 0 ? errorLines : [errorMessage]).map((line, idx) => (
-                    <Typography key={`${line}-${idx}`} variant="body2" sx={{ lineHeight: 1.5, color: 'text.primary' }}>
-                      {line}
-                    </Typography>
-                  ))}
+              {errorMessage && (
+                <Box>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, display: 'block', mb: 0.75, color: 'text.primary' }}>
+                    Error Message
+                  </Typography>
+                  <Box sx={{ m: 0 }}>
+                    {(errorLines.length > 0 ? errorLines : [errorMessage]).map((line, idx) => (
+                      <Typography key={`${line}-${idx}`} variant="body2" sx={{ lineHeight: 1.5, color: 'text.primary' }}>
+                        {line}
+                      </Typography>
+                    ))}
+                  </Box>
                 </Box>
-              </Box>
+              )}
 
               <Box>
                 <Box
