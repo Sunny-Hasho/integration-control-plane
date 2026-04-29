@@ -187,6 +187,10 @@ task packageICP {
                 into binDir
                 rename { 'icp-server.jar' }
             }
+
+            // Add version.txt to distribution root directory (PARENT_DIR)
+            def versionFile = file("${rootDir}/version.txt")
+            versionFile.text = "${version}\n"
             
             // Copy README and LICENSE if they exist
             if (file('README.md').exists()) {
