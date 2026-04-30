@@ -835,7 +835,7 @@ export function AutomationExecutions({ artifact }: TabProps) {
             sorted.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((exec, i) => (
               <ListingTable.Row key={i}>
                 <ListingTable.Cell>
-                  <Typography variant="body2">{new Date(exec.timestamp.replace(' ', 'T') + 'Z').toLocaleString()}</Typography>
+                  <Typography variant="body2">{new Date(exec.timestamp).toLocaleString()}</Typography>
                 </ListingTable.Cell>
                 <ListingTable.Cell>
                   <Typography sx={{ fontFamily: 'monospace', fontSize: 12 }}>{exec.runtimeName || exec.runtimeId}</Typography>

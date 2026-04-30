@@ -317,7 +317,7 @@ public isolated function getAutomationsByEnvironmentAndComponent(string environm
                     packageOrg: row.package_org,
                     packageName: row.package_name,
                     packageVersion: row.package_version,
-                    executionTimestamp: row.execution_timestamp
+                    executionTimestamp: convertDbDateTimeToISO8601(row.execution_timestamp)
                 };
                 automationRuntimeExecutions[key] = {};
             }
@@ -325,8 +325,9 @@ public isolated function getAutomationsByEnvironmentAndComponent(string environm
             // Get or create the runtime executions map for this automation
             map<string[]> runtimeExecs = automationRuntimeExecutions[key] ?: {};
             string[] existingTimestamps = runtimeExecs[row.runtime_id] ?: [];
-            if existingTimestamps.indexOf(row.execution_timestamp) is () {
-                existingTimestamps.push(row.execution_timestamp);
+            string isoTimestamp = convertDbDateTimeToISO8601(row.execution_timestamp);
+            if existingTimestamps.indexOf(isoTimestamp) is () {
+                existingTimestamps.push(isoTimestamp);
             }
             runtimeExecs[row.runtime_id] = existingTimestamps;
             automationRuntimeExecutions[key] = runtimeExecs;
@@ -339,8 +340,9 @@ public isolated function getAutomationsByEnvironmentAndComponent(string environm
             if automationMap.hasKey(key) {
                 map<string[]> runtimeExecs = automationRuntimeExecutions[key] ?: {};
                 string[] existingTimestamps = runtimeExecs[row.runtime_id] ?: [];
-                if existingTimestamps.indexOf(row.execution_timestamp) is () {
-                    existingTimestamps.push(row.execution_timestamp);
+                string isoTimestamp = convertDbDateTimeToISO8601(row.execution_timestamp);
+                if existingTimestamps.indexOf(isoTimestamp) is () {
+                    existingTimestamps.push(isoTimestamp);
                 }
                 runtimeExecs[row.runtime_id] = existingTimestamps;
                 automationRuntimeExecutions[key] = runtimeExecs;
