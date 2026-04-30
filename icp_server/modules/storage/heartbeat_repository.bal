@@ -547,10 +547,17 @@ isolated function upsertRuntime(types:Heartbeat heartbeat) returns boolean|error
         }
     }
 
+    // Determine new-vs-existing by explicit SELECT before the upsert
+    stream<record {|string runtime_id;|}, sql:Error?> existingById = dbClient->query(`
+        SELECT runtime_id FROM runtimes WHERE runtime_id = ${runtimeId}
+    `);
+    record {|string runtime_id;|}[] existingByIdRows = check from record {|string runtime_id;|} r in existingById
+        select r;
+    boolean isNewRegistration = existingByIdRows.length() == 0;
+
     // Atomic upsert for PostgreSQL, fallback to INSERT/UPDATE for others
-    sql:ExecutionResult res;
     if dbType == POSTGRESQL {
-        res = check dbClient->execute(`
+        _ = check dbClient->execute(`
             INSERT INTO runtimes (
                 runtime_id, name, runtime_type, status, version,
                 runtime_hostname, runtime_port,
@@ -596,9 +603,30 @@ isolated function upsertRuntime(types:Heartbeat heartbeat) returns boolean|error
                 server_name = EXCLUDED.server_name,
                 last_heartbeat = CURRENT_TIMESTAMP
         `);
+    } else if isNewRegistration {
+        _ = check dbClient->execute(`
+            INSERT INTO runtimes (
+                runtime_id, name, runtime_type, status, version,
+                runtime_hostname, runtime_port,
+                environment_id, project_id, component_id,
+                platform_name, platform_version, platform_home,
+                os_name, os_version,
+                carbon_home, java_vendor, java_version,
+                total_memory, free_memory, max_memory, used_memory,
+                os_arch, server_name, last_heartbeat
+            ) VALUES (
+                ${runtimeId}, ${runtimeName}, ${heartbeat.runtimeType}, ${heartbeat.status}, ${heartbeat.version},
+                ${runtimeHostname}, ${runtimePort},
+                ${heartbeat.environment}, ${heartbeat.project}, ${heartbeat.component},
+                ${heartbeat.nodeInfo.platformName}, ${heartbeat.nodeInfo.platformVersion}, ${heartbeat.nodeInfo.platformHome},
+                ${heartbeat.nodeInfo.osName}, ${heartbeat.nodeInfo.osVersion},
+                ${heartbeat.nodeInfo.carbonHome}, ${heartbeat.nodeInfo.javaVendor}, ${heartbeat.nodeInfo.javaVersion},
+                ${heartbeat.nodeInfo.totalMemory}, ${heartbeat.nodeInfo.freeMemory}, ${heartbeat.nodeInfo.maxMemory}, ${heartbeat.nodeInfo.usedMemory},
+                ${heartbeat.nodeInfo.osArch}, ${heartbeat.nodeInfo.platformName}, CURRENT_TIMESTAMP
+            )
+        `);
     } else {
-        // Fallback: try UPDATE, then INSERT if not found
-        res = check dbClient->execute(`
+        _ = check dbClient->execute(`
             UPDATE runtimes SET
                 name = ${runtimeName},
                 runtime_type = ${heartbeat.runtimeType},
@@ -626,32 +654,8 @@ isolated function upsertRuntime(types:Heartbeat heartbeat) returns boolean|error
                 last_heartbeat = CURRENT_TIMESTAMP
             WHERE runtime_id = ${runtimeId}
         `);
-        if ((res.affectedRowCount ?: 0) == 0) {
-            res = check dbClient->execute(`
-                INSERT INTO runtimes (
-                    runtime_id, name, runtime_type, status, version,
-                    runtime_hostname, runtime_port,
-                    environment_id, project_id, component_id,
-                    platform_name, platform_version, platform_home,
-                    os_name, os_version,
-                    carbon_home, java_vendor, java_version,
-                    total_memory, free_memory, max_memory, used_memory,
-                    os_arch, server_name, last_heartbeat
-                ) VALUES (
-                    ${runtimeId}, ${runtimeName}, ${heartbeat.runtimeType}, ${heartbeat.status}, ${heartbeat.version},
-                    ${runtimeHostname}, ${runtimePort},
-                    ${heartbeat.environment}, ${heartbeat.project}, ${heartbeat.component},
-                    ${heartbeat.nodeInfo.platformName}, ${heartbeat.nodeInfo.platformVersion}, ${heartbeat.nodeInfo.platformHome},
-                    ${heartbeat.nodeInfo.osName}, ${heartbeat.nodeInfo.osVersion},
-                    ${heartbeat.nodeInfo.carbonHome}, ${heartbeat.nodeInfo.javaVendor}, ${heartbeat.nodeInfo.javaVersion},
-                    ${heartbeat.nodeInfo.totalMemory}, ${heartbeat.nodeInfo.freeMemory}, ${heartbeat.nodeInfo.maxMemory}, ${heartbeat.nodeInfo.usedMemory},
-                    ${heartbeat.nodeInfo.osArch}, ${heartbeat.nodeInfo.platformName}, CURRENT_TIMESTAMP
-                )
-            `);
-        }
     }
-    // Return true if inserted, false if updated
-    return (res.affectedRowCount ?: 0) == 1;
+    return isNewRegistration;
 }
 
 // Insert all runtime artifacts
