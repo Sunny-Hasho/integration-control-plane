@@ -205,6 +205,7 @@ frontendJwtHMACSecret = "default-secret-key-at-least-32-characters-long-for-hs25
 # =============================================================================
 [icp_server.storage]
 # heartbeatTimeoutSeconds = 30
+# artifactsApiAllowInsecureTLS = true  # set false in production with proper trust
 # Primary database connection settings
 # Database type: h2 (in-memory), mysql, mssql, or postgresql. Default is h2
 
