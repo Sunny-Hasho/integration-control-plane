@@ -41,7 +41,7 @@ import {
   Typography,
 } from '@wso2/oxygen-ui';
 import { ChevronDown, ChevronRight, Maximize2, X } from '@wso2/oxygen-ui-icons-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useArtifactTypes, useArtifacts, ARTIFACT_QUERY_MAP, type GqlArtifact } from '../api/queries';
 import { useUpdateArtifactStatus, useUpdateListenerState } from '../api/mutations';
 import { useUpdateArtifactTracingStatus, useUpdateArtifactStatisticsStatus } from '../api/artifactToggleMutations';
@@ -398,6 +398,9 @@ export function ArtifactDetail({ selected, onClose }: { selected: SelectedArtifa
   const [stacktraceExpanded, setStacktraceExpanded] = useState(false);
   const [stacktraceLoading, setStacktraceLoading] = useState(false);
   const [stacktrace, setStacktrace] = useState<string | null>(null);
+  const [stacktraceError, setStacktraceError] = useState<string | null>(null);
+  const [stacktraceLoadedFor, setStacktraceLoadedFor] = useState<string | null>(null);
+  const stacktraceRequestRef = useRef<string | null>(null);
   const artifactKey = selected ? `${selected.artifactType}-${selected.artifact.name}` : '';
   useEffect(() => {
     if (selected?.initialTab) {
@@ -411,6 +414,9 @@ export function ArtifactDetail({ selected, onClose }: { selected: SelectedArtifa
     setStacktraceExpanded(false);
     setStacktraceLoading(false);
     setStacktrace(null);
+    setStacktraceError(null);
+    setStacktraceLoadedFor(null);
+    stacktraceRequestRef.current = null;
   }, [artifactKey, selected?.artifactType, selected?.initialTab]);
 
   if (!selected) return null;
@@ -479,28 +485,40 @@ export function ArtifactDetail({ selected, onClose }: { selected: SelectedArtifa
     : [];
 
   const loadStacktrace = async () => {
-    if (stacktrace || stacktraceLoading) return;
+    const runtimeId = (artifact.runtimes as Array<{ runtimeId: string }> | undefined)?.[0]?.runtimeId;
+    const appName = artifact.name?.toString();
+
+    if (!runtimeId || !appName) {
+      setStacktraceError('No stacktrace available. Missing runtime or Carbon App name.');
+      return;
+    }
+
+    const requestToken = `${runtimeId}::${appName}`;
+    if (stacktraceLoadedFor === requestToken || stacktraceLoading) return;
+
+    stacktraceRequestRef.current = requestToken;
     setStacktraceLoading(true);
+    setStacktraceError(null);
+
     try {
-      const runtimeId = (artifact.runtimes as Array<{ runtimeId: string }> | undefined)?.[0]?.runtimeId;
-      const appName = artifact.name?.toString();
-
-      if (!runtimeId || !appName) {
-        setStacktrace('No stacktrace available. Missing runtime or Carbon App name.');
-        return;
-      }
-
       const result = await gql<{ carbonAppFaultStackTrace: { faultStackTrace: string } }>(CARBON_APP_FAULT_STACKTRACE_QUERY, {
         runtimeId,
         appName,
       });
 
-      setStacktrace(result.carbonAppFaultStackTrace?.faultStackTrace || 'No stacktrace available.');
+      if (stacktraceRequestRef.current !== requestToken) return;
+
+      setStacktrace(result.carbonAppFaultStackTrace?.faultStackTrace || null);
+      setStacktraceLoadedFor(requestToken);
     } catch (error) {
       console.error('Error fetching carbon app stacktrace:', error);
-      setStacktrace('Failed to load stacktrace.');
+      if (stacktraceRequestRef.current === requestToken) {
+        setStacktraceError('Failed to load stacktrace.');
+      }
     } finally {
-      setStacktraceLoading(false);
+      if (stacktraceRequestRef.current === requestToken) {
+        setStacktraceLoading(false);
+      }
     }
   };
 
@@ -527,7 +545,7 @@ export function ArtifactDetail({ selected, onClose }: { selected: SelectedArtifa
           </IconButton>
         </Stack>
       </Stack>
-      {(isFaultyCarbon || errorMessage || stacktraceLoading || stacktrace || stacktraceExpanded) && (
+      {(isFaultyCarbon || errorMessage || stacktraceLoading || stacktrace || stacktraceError || stacktraceExpanded) && (
         <Box sx={{ px: 2, pt: 1.5, pb: 3, backgroundColor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}>
           <Stack spacing={0} alignItems="flex-start">
             <Chip label="Faulty" size="small" color="error" sx={{ mt: 0.5 }} />
@@ -575,6 +593,10 @@ export function ArtifactDetail({ selected, onClose }: { selected: SelectedArtifa
                   (stacktraceLoading ? (
                     <Typography id={stacktracePanelId} variant="body2" color="text.secondary" sx={{ p: 1 }}>
                       Loading stacktrace...
+                    </Typography>
+                  ) : stacktraceError ? (
+                    <Typography id={stacktracePanelId} variant="body2" color="error" sx={{ p: 1 }}>
+                      {stacktraceError}
                     </Typography>
                   ) : (
                     <Box
