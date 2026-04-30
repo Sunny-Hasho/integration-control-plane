@@ -31,7 +31,7 @@ configurable string keystorePassword = "wso2carbon";
 configurable string truststorePath = check file:joinPath("..", "conf", "security", "client-truststore.jks");
 configurable string truststorePassword = "wso2carbon";
 
-configurable int schedulerIntervalSeconds = 600;
+configurable int schedulerIntervalSeconds = 60;
 configurable int refreshTokenCleanupIntervalSeconds = 86400; // 24 hours (in seconds)
 
 // Runtime auth configuration (runtime and server communication)
