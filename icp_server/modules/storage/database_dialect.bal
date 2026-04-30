@@ -162,12 +162,16 @@ public isolated function appendLimitClause(sql:ParameterizedQuery query, int row
 }
 
 // Convert a DB timestamp string (UTC, no timezone marker) to ISO 8601 UTC.
-// Input:  "2026-04-30 10:30:00" or "2026-04-30 10:30:00.000000"
+// Handles space separator (MySQL/H2/PostgreSQL) and T separator (MSSQL DATETIME2).
+// Input:  "2026-04-30 10:30:00", "2026-04-30 10:30:00.000000", "2026-04-30T10:30:00.0000000"
 // Output: "2026-04-30T10:30:00Z"
 public isolated function convertDbDateTimeToISO8601(string dbTimestamp) returns string {
-    string normalized = dbTimestamp.substring(0, 10) + "T" + dbTimestamp.substring(11);
-    int dotIndex = normalized.indexOf(".") ?: normalized.length();
-    return normalized.substring(0, dotIndex) + "Z";
+    int dotIndex = dbTimestamp.indexOf(".") ?: dbTimestamp.length();
+    string base = dbTimestamp.substring(0, int:min(dotIndex, 19));
+    if base.length() > 10 && base.substring(10, 11) == " " {
+        return base.substring(0, 10) + "T" + base.substring(11) + "Z";
+    }
+    return base + "Z";
 }
 
 // Cast string to timestamp for PostgreSQL (no-op for other databases)
