@@ -520,65 +520,91 @@ isolated function upsertRuntime(types:Heartbeat heartbeat) returns boolean|error
     string runtimeHostname = heartbeat.runtimeHostname ?: "";
     string runtimePort = heartbeat.runtimePort ?: "";
 
-    // Try INSERT first
-    sql:ExecutionResult|error insertRes = dbClient->execute(`
-        INSERT INTO runtimes (
-            runtime_id, name, runtime_type, status, version,
-            runtime_hostname, runtime_port,
-            environment_id, project_id, component_id,
-            platform_name, platform_version, platform_home,
-            os_name, os_version,
-            carbon_home, java_vendor, java_version,
-            total_memory, free_memory, max_memory, used_memory,
-            os_arch, server_name, last_heartbeat
-        ) VALUES (
-            ${runtimeId}, ${runtimeName}, ${heartbeat.runtimeType}, ${heartbeat.status}, ${heartbeat.version},
-            ${runtimeHostname}, ${runtimePort},
-            ${heartbeat.environment}, ${heartbeat.project}, ${heartbeat.component},
-            ${heartbeat.nodeInfo.platformName}, ${heartbeat.nodeInfo.platformVersion}, ${heartbeat.nodeInfo.platformHome},
-            ${heartbeat.nodeInfo.osName}, ${heartbeat.nodeInfo.osVersion},
-            ${heartbeat.nodeInfo.carbonHome}, ${heartbeat.nodeInfo.javaVendor}, ${heartbeat.nodeInfo.javaVersion},
-            ${heartbeat.nodeInfo.totalMemory}, ${heartbeat.nodeInfo.freeMemory}, ${heartbeat.nodeInfo.maxMemory}, ${heartbeat.nodeInfo.usedMemory},
-            ${heartbeat.nodeInfo.osArch}, ${heartbeat.nodeInfo.platformName}, CURRENT_TIMESTAMP
-        )
-    `);
-
-    if insertRes is sql:ExecutionResult {
-        int? rows = insertRes.affectedRowCount;
-        return rows == 1;
-    }
-
-    if insertRes is sql:Error && classifySqlError(insertRes) != DUPLICATE_KEY {
-        return insertRes;
-    }
-
-    log:printDebug(string `Runtime already exists for component ${heartbeat.component}, env ${heartbeat.environment}, name ${runtimeName ?: "null"}`);
-
-    stream<record {|string runtime_id;|}, sql:Error?> existing;
+    // Check if a runtime with the same component/env/name but different ID exists (ID change scenario)
+    stream<record {|string runtime_id;|}, sql:Error?> existingByName;
     if runtimeName is string {
-        existing = dbClient->query(`
+        existingByName = dbClient->query(`
             SELECT runtime_id FROM runtimes
             WHERE component_id = ${heartbeat.component} AND environment_id = ${heartbeat.environment} AND name = ${runtimeName}
         `);
     } else {
-        existing = dbClient->query(`
+        existingByName = dbClient->query(`
             SELECT runtime_id FROM runtimes
             WHERE component_id = ${heartbeat.component} AND environment_id = ${heartbeat.environment} AND name IS NULL
         `);
     }
-    record {|string runtime_id;|}[] rows = check from record {|string runtime_id;|} r in existing
+    record {|string runtime_id;|}[] existingByNameRows = check from record {|string runtime_id;|} r in existingByName
         select r;
 
-    if rows.length() > 0 && rows[0].runtime_id != runtimeId {
-        string oldId = rows[0].runtime_id;
-        log:printInfo(string `Runtime ID changed from ${oldId} to ${runtimeId} for ${runtimeName ?: "null"}`);
-        log:printDebug(string `Deleting old runtime ${oldId} via reconcile cleanup flow`);
+    if existingByNameRows.length() > 0 {
+        string oldId = existingByNameRows[0].runtime_id;
+        if oldId != runtimeId {
+            log:printInfo(string `Runtime ID changed from ${oldId} to ${runtimeId} for ${runtimeName ?: "null"}`);
+            log:printDebug(string `Deleting old runtime ${oldId} via reconcile cleanup flow`);
+            check deleteExistingArtifacts(oldId);
+            check deleteReconcileRuntime(oldId);
+            check deleteRuntime(oldId);
+        }
+    }
 
-        check deleteRuntime(oldId);
-        check deleteReconcileRuntime(oldId);
+    // Determine new-vs-existing by explicit SELECT before the upsert
+    stream<record {|string runtime_id;|}, sql:Error?> existingById = dbClient->query(`
+        SELECT runtime_id FROM runtimes WHERE runtime_id = ${runtimeId}
+    `);
+    record {|string runtime_id;|}[] existingByIdRows = check from record {|string runtime_id;|} r in existingById
+        select r;
+    boolean isNewRegistration = existingByIdRows.length() == 0;
 
-        log:printDebug(string `Inserting new runtime ${runtimeId} after ID change`);
-        sql:ExecutionResult res = check dbClient->execute(`
+    // Atomic upsert for PostgreSQL, fallback to INSERT/UPDATE for others
+    if dbType == POSTGRESQL {
+        _ = check dbClient->execute(`
+            INSERT INTO runtimes (
+                runtime_id, name, runtime_type, status, version,
+                runtime_hostname, runtime_port,
+                environment_id, project_id, component_id,
+                platform_name, platform_version, platform_home,
+                os_name, os_version,
+                carbon_home, java_vendor, java_version,
+                total_memory, free_memory, max_memory, used_memory,
+                os_arch, server_name, last_heartbeat
+            ) VALUES (
+                ${runtimeId}, ${runtimeName}, ${heartbeat.runtimeType}, ${heartbeat.status}, ${heartbeat.version},
+                ${runtimeHostname}, ${runtimePort},
+                ${heartbeat.environment}, ${heartbeat.project}, ${heartbeat.component},
+                ${heartbeat.nodeInfo.platformName}, ${heartbeat.nodeInfo.platformVersion}, ${heartbeat.nodeInfo.platformHome},
+                ${heartbeat.nodeInfo.osName}, ${heartbeat.nodeInfo.osVersion},
+                ${heartbeat.nodeInfo.carbonHome}, ${heartbeat.nodeInfo.javaVendor}, ${heartbeat.nodeInfo.javaVersion},
+                ${heartbeat.nodeInfo.totalMemory}, ${heartbeat.nodeInfo.freeMemory}, ${heartbeat.nodeInfo.maxMemory}, ${heartbeat.nodeInfo.usedMemory},
+                ${heartbeat.nodeInfo.osArch}, ${heartbeat.nodeInfo.platformName}, CURRENT_TIMESTAMP
+            )
+            ON CONFLICT (runtime_id) DO UPDATE SET
+                name = EXCLUDED.name,
+                runtime_type = EXCLUDED.runtime_type,
+                status = EXCLUDED.status,
+                version = EXCLUDED.version,
+                runtime_hostname = EXCLUDED.runtime_hostname,
+                runtime_port = EXCLUDED.runtime_port,
+                environment_id = EXCLUDED.environment_id,
+                project_id = EXCLUDED.project_id,
+                component_id = EXCLUDED.component_id,
+                platform_name = EXCLUDED.platform_name,
+                platform_version = EXCLUDED.platform_version,
+                platform_home = EXCLUDED.platform_home,
+                os_name = EXCLUDED.os_name,
+                os_version = EXCLUDED.os_version,
+                carbon_home = EXCLUDED.carbon_home,
+                java_vendor = EXCLUDED.java_vendor,
+                java_version = EXCLUDED.java_version,
+                total_memory = EXCLUDED.total_memory,
+                free_memory = EXCLUDED.free_memory,
+                max_memory = EXCLUDED.max_memory,
+                used_memory = EXCLUDED.used_memory,
+                os_arch = EXCLUDED.os_arch,
+                server_name = EXCLUDED.server_name,
+                last_heartbeat = CURRENT_TIMESTAMP
+        `);
+    } else if isNewRegistration {
+        _ = check dbClient->execute(`
             INSERT INTO runtimes (
                 runtime_id, name, runtime_type, status, version,
                 runtime_hostname, runtime_port,
@@ -599,41 +625,37 @@ isolated function upsertRuntime(types:Heartbeat heartbeat) returns boolean|error
                 ${heartbeat.nodeInfo.osArch}, ${heartbeat.nodeInfo.platformName}, CURRENT_TIMESTAMP
             )
         `);
-        log:printDebug(string `Successfully inserted runtime ${runtimeId} after ID change`);
-        return (res.affectedRowCount ?: 0) == 1;
+    } else {
+        _ = check dbClient->execute(`
+            UPDATE runtimes SET
+                name = ${runtimeName},
+                runtime_type = ${heartbeat.runtimeType},
+                status = ${heartbeat.status},
+                version = ${heartbeat.version},
+                runtime_hostname = ${runtimeHostname},
+                runtime_port = ${runtimePort},
+                environment_id = ${heartbeat.environment},
+                project_id = ${heartbeat.project},
+                component_id = ${heartbeat.component},
+                platform_name = ${heartbeat.nodeInfo.platformName},
+                platform_version = ${heartbeat.nodeInfo.platformVersion},
+                platform_home = ${heartbeat.nodeInfo.platformHome},
+                os_name = ${heartbeat.nodeInfo.osName},
+                os_version = ${heartbeat.nodeInfo.osVersion},
+                carbon_home = ${heartbeat.nodeInfo.carbonHome},
+                java_vendor = ${heartbeat.nodeInfo.javaVendor},
+                java_version = ${heartbeat.nodeInfo.javaVersion},
+                total_memory = ${heartbeat.nodeInfo.totalMemory},
+                free_memory = ${heartbeat.nodeInfo.freeMemory},
+                max_memory = ${heartbeat.nodeInfo.maxMemory},
+                used_memory = ${heartbeat.nodeInfo.usedMemory},
+                os_arch = ${heartbeat.nodeInfo.osArch},
+                server_name = ${heartbeat.nodeInfo.platformName},
+                last_heartbeat = CURRENT_TIMESTAMP
+            WHERE runtime_id = ${runtimeId}
+        `);
     }
-
-    log:printDebug(string `Updating existing runtime ${runtimeId} with latest heartbeat data`);
-    _ = check dbClient->execute(`
-        UPDATE runtimes SET
-            name = ${runtimeName},
-            runtime_type = ${heartbeat.runtimeType},
-            status = ${heartbeat.status},
-            version = ${heartbeat.version},
-            runtime_hostname = ${runtimeHostname},
-            runtime_port = ${runtimePort},
-            environment_id = ${heartbeat.environment},
-            project_id = ${heartbeat.project},
-            component_id = ${heartbeat.component},
-            platform_name = ${heartbeat.nodeInfo.platformName},
-            platform_version = ${heartbeat.nodeInfo.platformVersion},
-            platform_home = ${heartbeat.nodeInfo.platformHome},
-            os_name = ${heartbeat.nodeInfo.osName},
-            os_version = ${heartbeat.nodeInfo.osVersion},
-            carbon_home = ${heartbeat.nodeInfo.carbonHome},
-            java_vendor = ${heartbeat.nodeInfo.javaVendor},
-            java_version = ${heartbeat.nodeInfo.javaVersion},
-            total_memory = ${heartbeat.nodeInfo.totalMemory},
-            free_memory = ${heartbeat.nodeInfo.freeMemory},
-            max_memory = ${heartbeat.nodeInfo.maxMemory},
-            used_memory = ${heartbeat.nodeInfo.usedMemory},
-            os_arch = ${heartbeat.nodeInfo.osArch},
-            server_name = ${heartbeat.nodeInfo.platformName},
-            last_heartbeat = CURRENT_TIMESTAMP
-        WHERE runtime_id = ${runtimeId}
-    `);
-
-    return false;
+    return isNewRegistration;
 }
 
 // Insert all runtime artifacts
