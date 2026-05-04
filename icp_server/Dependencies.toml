@@ -111,7 +111,7 @@ modules = [
 [[package]]
 org = "ballerina"
 name = "http"
-version = "2.16.1"
+version = "2.16.2"
 dependencies = [
 	{org = "ballerina", name = "auth"},
 	{org = "ballerina", name = "cache"},
@@ -498,7 +498,7 @@ modules = [
 [[package]]
 org = "ballerinax"
 name = "cdc"
-version = "1.3.0"
+version = "1.3.1"
 dependencies = [
 	{org = "ballerina", name = "crypto"},
 	{org = "ballerina", name = "data.jsondata"},
