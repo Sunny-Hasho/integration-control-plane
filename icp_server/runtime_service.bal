@@ -67,7 +67,7 @@ service /icp on runtimeListener {
             error? validationErr = storage:validateHeartbeatProtocolAndRuntime(heartbeat);
             if validationErr is error {
                 log:printWarn(string `Heartbeat rejected — validation failed: ${validationErr.message()}`);
-                return <http:BadRequest>{body: string `Invalid heartbeat: ${validationErr.message()}`};
+                return <http:BadRequest>{body: {message: string `Invalid heartbeat: ${validationErr.message()}`}};
             }
 
             string runtimeId = heartbeat.runtimeId;
@@ -76,13 +76,13 @@ service /icp on runtimeListener {
             string|error jwtToken = extractBearerToken(request);
             if jwtToken is error {
                 log:printWarn(string `Heartbeat rejected — missing bearer token for runtime: ${runtimeId}`);
-                return <http:Unauthorized>{body: "Missing or malformed Authorization header"};
+                return <http:Unauthorized>{body: {message: "Missing or malformed Authorization header"}};
             }
 
             string|error kidResult = extractKidFromJwt(jwtToken);
             if kidResult is error {
                 log:printWarn(string `Heartbeat rejected — bad JWT kid for runtime: ${runtimeId}: ${kidResult.message()}`);
-                return <http:Unauthorized>{body: string `Invalid JWT: ${kidResult.message()}`};
+                return <http:Unauthorized>{body: {message: string `Invalid JWT: ${kidResult.message()}`}};
             }
             string kid = kidResult;
             log:printDebug(string `Heartbeat from runtime=${runtimeId}, kid=${kid}`);
@@ -90,7 +90,7 @@ service /icp on runtimeListener {
             types:OrgSecret|error orgSecretResult = storage:lookupOrgSecretByKeyId(kid);
             if orgSecretResult is error {
                 log:printWarn(string `Heartbeat rejected — unknown kid=${kid} for runtime: ${runtimeId}`);
-                return <http:BadRequest>{body: string `Unknown key ID '${kid}'`};
+                return <http:BadRequest>{body: {message: string `Unknown key ID '${kid}'`}};
             }
             types:OrgSecret orgSecret = orgSecretResult;
             http:Unauthorized? authResult = validateRuntimeJwtWithSecret(jwtToken, orgSecret.keyMaterial);
@@ -206,13 +206,13 @@ service /icp on runtimeListener {
             string|error jwtToken = extractBearerToken(request);
             if jwtToken is error {
                 log:printWarn(string `Delta heartbeat rejected — missing bearer token for runtime: ${runtimeId}`);
-                return <http:Unauthorized>{body: "Missing or malformed Authorization header"};
+                return <http:Unauthorized>{body: {message: "Missing or malformed Authorization header"}};
             }
 
             string|error kidResult = extractKidFromJwt(jwtToken);
             if kidResult is error {
                 log:printWarn(string `Delta heartbeat rejected — bad JWT kid for runtime: ${runtimeId}: ${kidResult.message()}`);
-                return <http:Unauthorized>{body: string `Invalid JWT: ${kidResult.message()}`};
+                return <http:Unauthorized>{body: {message: string `Invalid JWT: ${kidResult.message()}`}};
             }
             string kid = kidResult;
             log:printDebug(string `Delta heartbeat from runtime=${runtimeId}, kid=${kid}`);
@@ -220,7 +220,7 @@ service /icp on runtimeListener {
             types:OrgSecret|error orgSecretResult = storage:lookupOrgSecretByKeyId(kid);
             if orgSecretResult is error {
                 log:printWarn(string `Delta heartbeat rejected — unknown kid=${kid} for runtime: ${runtimeId}`);
-                return <http:BadRequest>{body: string `Unknown key ID '${kid}'`};
+                return <http:BadRequest>{body: {message: string `Unknown key ID '${kid}'`}};
             }
             types:OrgSecret orgSecret = orgSecretResult;
             http:Unauthorized? authResult = validateRuntimeJwtWithSecret(jwtToken, orgSecret.keyMaterial);
@@ -300,12 +300,12 @@ isolated function validateRuntimeJwtWithSecret(string jwtToken, string hmacSecre
     jwt:Payload|jwt:Error validatedPayload = jwt:validate(jwtToken, validatorConfig);
     if validatedPayload is jwt:Error {
         log:printDebug(string `JWT validation failed: ${validatedPayload.message()}`);
-        return <http:Unauthorized>{body: "Invalid or expired token"};
+        return <http:Unauthorized>{body: {message: "Invalid or expired token"}};
     }
 
     anydata scope = validatedPayload["scope"];
     if !(scope is string && scope == "runtime_agent") {
-        return <http:Unauthorized>{body: "Insufficient scope — 'runtime_agent' required"};
+        return <http:Unauthorized>{body: {message: "Insufficient scope — 'runtime_agent' required"}};
     }
 
     return ();
