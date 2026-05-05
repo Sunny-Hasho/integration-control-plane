@@ -1859,7 +1859,6 @@ service /graphql on graphqlListener {
         };
     }
 
-    // Update log level for BI and MI runtimes
     isolated remote function deleteLogger(graphql:Context context, types:DeleteLoggerInput input) returns types:DeleteLoggerResponse|error {
         types:UserContextV2 userContext = check extractUserContext(context);
         log:printDebug("deleteLogger request received", userId = userContext.userId, loggerName = input.loggerName, runtimeCount = input.runtimeIds.length());
