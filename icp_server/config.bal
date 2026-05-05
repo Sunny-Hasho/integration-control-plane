@@ -18,6 +18,9 @@ import icp_server.types;
 
 import ballerina/file;
 
+// ICP version
+configurable string icpVersion = "2.0.0-SNAPSHOT";
+
 // Server configuration
 configurable int serverPort = 9446;
 configurable int defaultOpensearchAdaptorPort = 9449;

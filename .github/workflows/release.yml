@@ -131,6 +131,28 @@ jobs:
           grep project.version gradle.properties
           echo "Version will be: ${VERSION}"
 
+      - name: Update version in config files
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Escape special characters for sed (/, &, \)
+          ESCAPED_VERSION=$(echo "$VERSION" | sed 's/[\/&]/\\&/g')
+
+          # Update icpVersion default in icp_server/config.bal
+          sed -i "s/^configurable string icpVersion = \".*\";/configurable string icpVersion = \"${ESCAPED_VERSION}\";/" icp_server/config.bal
+
+          # Update VITE_ICP_VERSION in both config.json files (dev + bundled www)
+          jq --arg v "$VERSION" '.VITE_ICP_VERSION = $v' frontend/public/config.json > /tmp/config.json && mv /tmp/config.json frontend/public/config.json
+          jq --arg v "$VERSION" '.VITE_ICP_VERSION = $v' www/config.json > /tmp/config.json && mv /tmp/config.json www/config.json
+
+          # Verify changes
+          echo "=== icp_server/config.bal ==="
+          grep icpVersion icp_server/config.bal
+          echo "=== frontend/public/config.json ==="
+          jq .VITE_ICP_VERSION frontend/public/config.json
+          echo "=== www/config.json ==="
+          jq .VITE_ICP_VERSION www/config.json
+
       - name: Build distribution package
         run: ./gradlew clean build
         env:
