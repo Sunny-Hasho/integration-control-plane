@@ -27,6 +27,7 @@ interface RuntimeConfig {
   VITE_AUTH_BASE_URL?: string;
   VITE_OBSERVABILITY_URL?: string;
   VITE_SSO_ENABLED?: boolean;
+  VITE_ICP_VERSION?: string;
 }
 
 export interface ApiConfig {
@@ -34,6 +35,7 @@ export interface ApiConfig {
   authBaseUrl: string;
   observabilityUrl: string;
   ssoEnabled: boolean;
+  version: string;
 }
 
 // Extend window interface
@@ -49,6 +51,7 @@ const DEFAULT_CONFIG: ApiConfig = {
   authBaseUrl: 'https://localhost:9446/auth',
   observabilityUrl: 'https://localhost:9446/icp/observability',
   ssoEnabled: false,
+  version: '',
 };
 
 /**
@@ -69,6 +72,7 @@ export async function loadConfig(): Promise<void> {
       authBaseUrl: config.VITE_AUTH_BASE_URL || DEFAULT_CONFIG.authBaseUrl,
       observabilityUrl: config.VITE_OBSERVABILITY_URL || DEFAULT_CONFIG.observabilityUrl,
       ssoEnabled: config.VITE_SSO_ENABLED ?? DEFAULT_CONFIG.ssoEnabled,
+      version: config.VITE_ICP_VERSION || DEFAULT_CONFIG.version,
     };
 
     console.info('✓ Runtime configuration loaded from config.json');
@@ -101,3 +105,4 @@ export const oidcCallbackApiUrl = (): string => `${window.API_CONFIG.authBaseUrl
 export const changePasswordApiUrl = (): string => `${window.API_CONFIG.authBaseUrl}/change-password`;
 export const forceChangePasswordApiUrl = (): string => `${window.API_CONFIG.authBaseUrl}/force-change-password`;
 export const isSsoEnabled = (): boolean => window.API_CONFIG.ssoEnabled;
+export const getIcpVersion = (): string => window.API_CONFIG.version;

@@ -2416,3 +2416,7 @@ public type ValidatedRuntime record {|
     string componentId;
     Runtime runtime;
 |};
+
+public type SystemInfo record {|
+    string version;
+|};

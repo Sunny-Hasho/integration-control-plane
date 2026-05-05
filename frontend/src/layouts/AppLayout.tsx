@@ -57,6 +57,7 @@ import { cookiePolicyUrl, loginUrl, orgUrl, privacyPolicyUrl, profileUrl } from 
 import { useAuth } from '../auth/AuthContext';
 import { useAccessControl } from '../contexts/AccessControlContext';
 import { ALL_USER_MGT_PERMISSIONS, Permissions } from '../constants/permissions';
+import { getIcpVersion } from '../config/api';
 
 const SIDEBAR_ICONS: Record<Resource, JSX.Element> = {
   overview: <LayoutDashboard size={20} />,
@@ -592,6 +593,7 @@ export default function AppLayout(): JSX.Element {
           <Footer.Link href="https://wso2.com/support" target="_blank" rel="noreferrer">
             Support
           </Footer.Link>
+          {getIcpVersion() && <Footer.Version>v{getIcpVersion()}</Footer.Version>}
           <Footer.Copyright>&copy; {new Date().getFullYear()}, WSO2 LLC.</Footer.Copyright>
         </Footer>
       </AppShell.Footer>

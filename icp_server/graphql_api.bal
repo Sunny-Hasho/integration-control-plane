@@ -3578,5 +3578,11 @@ service /graphql on graphqlListener {
         log:printInfo("Successfully deleted MI user on runtime", username = username, runtimeId = runtimeId);
         return {username, status: "Deleted"};
     }
+
+    // Returns ICP server version information
+    isolated resource function get systemInfo(graphql:Context context) returns types:SystemInfo|error {
+        _ = check extractUserContext(context);
+        return {version: icpVersion};
+    }
 }
 
