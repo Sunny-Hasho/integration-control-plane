@@ -233,6 +233,26 @@ public isolated function updateLogger(http:Client mgmtClient, string hmacToken, 
     }
 }
 
+// Delete logger via the MI Management API
+public isolated function deleteLogger(http:Client mgmtClient, string hmacToken, string loggerName) returns types:MgmtDeleteLoggerResponse|error {
+    string encodedName = check url:encode(loggerName, "UTF-8");
+    string path = string `${MGMT_API_PATH}/logging?loggerName=${encodedName}`;
+    log:printDebug("Calling MI management API to delete logger", path = path, loggerName = loggerName);
+
+    do {
+        types:MgmtDeleteLoggerResponse respResult = check mgmtClient->delete(path, headers = {
+            [HEADER_AUTHORIZATION]: string `Bearer ${hmacToken}`,
+            [HEADER_ACCEPT]: CONTENT_TYPE_JSON
+        });
+
+        log:printInfo("Successfully deleted logger via MI management API", loggerName = loggerName);
+        return respResult;
+    } on fail error e {
+        log:printError("Failed to delete logger via MI management API", loggerName = loggerName, errorMessage = e.message());
+        return e;
+    }
+}
+
 // ============================================================
 // Dispatcher function
 // ============================================================

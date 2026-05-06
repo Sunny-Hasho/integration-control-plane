@@ -41,12 +41,12 @@ import {
   TextField,
   Typography,
 } from '@wso2/oxygen-ui';
-import { Maximize2, RefreshCw, Server, X } from '@wso2/oxygen-ui-icons-react';
+import { Maximize2, RefreshCw, Server, Trash2, X } from '@wso2/oxygen-ui-icons-react';
 import { useState, type JSX } from 'react';
 import { useQueryClient, useQueries } from '@tanstack/react-query';
 import { useProjectByHandler, useComponentByHandler, useEnvironments, useLoggers, RUNTIMES_QUERY, type GqlRuntime } from '../api/queries';
 import { gql } from '../api/graphql';
-import { useUpdateLogLevel } from '../api/mutations';
+import { useUpdateLogLevel, useDeleteLogger } from '../api/mutations';
 import NotFound from '../components/NotFound';
 import { resourceUrl, broaden, type ComponentScope } from '../nav';
 
@@ -82,10 +82,25 @@ const getLogLevelColor = (level: string): 'default' | 'primary' | 'secondary' | 
 function LoggersList({ environmentId, componentId, componentType }: { environmentId: string; componentId: string; componentType: string }) {
   const { data: loggers = [], isLoading, isError, error, refetch } = useLoggers(environmentId, componentId);
   const updateLogLevel = useUpdateLogLevel();
+  const deleteLogger = useDeleteLogger();
   const [updatingLogger, setUpdatingLogger] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [runtimeDrawer, setRuntimeDrawer] = useState<{ loggerName: string; runtimeIds: string[] } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ loggerName: string; runtimeIds: string[] } | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDeleteLogger = async () => {
+    if (!deleteConfirm) return;
+    setDeleteError(null);
+    try {
+      await deleteLogger.mutateAsync({ runtimeIds: deleteConfirm.runtimeIds, loggerName: deleteConfirm.loggerName });
+      await refetch();
+      setDeleteConfirm(null);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   const handleLogLevelChange = async (uniqueKey: string, loggerName: string, componentName: string, runtimeIds: string[], newLevel: LogLevel) => {
     setUpdatingLogger(uniqueKey);
@@ -155,8 +170,8 @@ function LoggersList({ environmentId, componentId, componentType }: { environmen
             <ListingTable.Row>
               {isMI && <ListingTable.Cell>Logger Name</ListingTable.Cell>}
               <ListingTable.Cell>Component Name</ListingTable.Cell>
-              <ListingTable.Cell>Log Level</ListingTable.Cell>
-              <ListingTable.Cell></ListingTable.Cell>
+              <ListingTable.Cell sx={{ width: 160 }}>Log Level</ListingTable.Cell>
+              <ListingTable.Cell sx={{ width: 200 }}></ListingTable.Cell>
             </ListingTable.Row>
           </ListingTable.Head>
           <ListingTable.Body>
@@ -166,14 +181,14 @@ function LoggersList({ environmentId, componentId, componentType }: { environmen
               return (
                 <ListingTable.Row key={uniqueKey}>
                   {isMI && (
-                    <ListingTable.Cell>
-                      <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                    <ListingTable.Cell sx={{ maxWidth: 280 }}>
+                      <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
                         {logger.loggerName}
                       </Typography>
                     </ListingTable.Cell>
                   )}
-                  <ListingTable.Cell>
-                    <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                  <ListingTable.Cell sx={{ maxWidth: 220 }}>
+                    <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
                       {logger.componentName}
                     </Typography>
                   </ListingTable.Cell>
@@ -194,10 +209,17 @@ function LoggersList({ environmentId, componentId, componentType }: { environmen
                       <Box sx={{ width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{(logger.logLevelInSync === false || updatingLogger === uniqueKey) && <CircularProgress size={16} />}</Box>
                     </Stack>
                   </ListingTable.Cell>
-                  <ListingTable.Cell>
-                    <Button variant="contained" size="small" startIcon={<Server size={14} />} onClick={() => setRuntimeDrawer({ loggerName: logger.loggerName || logger.componentName, runtimeIds: logger.runtimeIds })}>
-                      View Runtimes
-                    </Button>
+                  <ListingTable.Cell sx={{ whiteSpace: 'nowrap' }}>
+                    <Stack direction="row" gap={1} alignItems="center">
+                      <Button variant="contained" size="small" startIcon={<Server size={14} />} onClick={() => setRuntimeDrawer({ loggerName: logger.loggerName || logger.componentName, runtimeIds: logger.runtimeIds })}>
+                        View Runtimes
+                      </Button>
+                      {isMI && (
+                        <IconButton size="small" color="error" aria-label="Delete logger" onClick={() => setDeleteConfirm({ loggerName: logger.loggerName, runtimeIds: logger.runtimeIds })}>
+                          <Trash2 size={16} />
+                        </IconButton>
+                      )}
+                    </Stack>
                   </ListingTable.Cell>
                 </ListingTable.Row>
               );
@@ -260,6 +282,40 @@ function LoggersList({ environmentId, componentId, componentType }: { environmen
             </ListingTable>
           </Box>
         </Drawer>
+      )}
+      {deleteConfirm && (
+        <Dialog
+          open
+          onClose={() => {
+            setDeleteConfirm(null);
+            setDeleteError(null);
+          }}
+          maxWidth="xs"
+          fullWidth>
+          <DialogTitle>Delete Logger</DialogTitle>
+          <DialogContent>
+            <Stack spacing={2}>
+              <Typography>
+                Are you sure you want to delete logger <strong>{deleteConfirm.loggerName}</strong> from {deleteConfirm.runtimeIds.length} runtime(s)?
+              </Typography>
+              {deleteError && <Alert severity="error">{deleteError}</Alert>}
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button
+              onClick={() => {
+                setDeleteConfirm(null);
+                setDeleteError(null);
+              }}
+              color="inherit"
+              disabled={deleteLogger.isPending}>
+              Cancel
+            </Button>
+            <Button onClick={handleDeleteLogger} variant="contained" color="error" disabled={deleteLogger.isPending}>
+              {deleteLogger.isPending ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogActions>
+        </Dialog>
       )}
     </>
   );

@@ -2392,6 +2392,16 @@ public type UpdateLogLevelResponse record {|
     string[] commandIds; // For BI: command IDs, For MI: empty array (immediate update)
 |};
 
+public type DeleteLoggerInput record {|
+    string[] runtimeIds;
+    string loggerName;
+|};
+
+public type DeleteLoggerResponse record {|
+    boolean success;
+    string message;
+|};
+
 // ============================================================
 // MI Runtime User Management Types
 // ============================================================

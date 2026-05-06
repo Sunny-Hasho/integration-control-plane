@@ -475,6 +475,113 @@ isolated function updateLogLevelMI(types:UserContextV2 userContext, types:Update
     };
 }
 
+isolated function deleteLoggerMI(types:UserContextV2 userContext, types:DeleteLoggerInput input) returns types:DeleteLoggerResponse|error {
+    string loggerName = input.loggerName;
+    log:printDebug("deleteLoggerMI: validating runtimes and permissions", userId = userContext.userId, loggerName = loggerName, runtimeIds = input.runtimeIds);
+
+    types:ValidatedRuntime[] validatedRuntimes = [];
+
+    foreach string runtimeId in input.runtimeIds {
+        types:Runtime? runtime = check storage:getRuntimeById(runtimeId);
+        if runtime is () {
+            log:printWarn("Runtime not found, skipping", runtimeId = runtimeId, loggerName = loggerName);
+            continue;
+        }
+
+        types:AccessScope scope = auth:buildScopeFromContext(
+                runtime.component.projectId,
+                runtime.component.id,
+                runtime.environment.id
+        );
+
+        if !check auth:hasPermission(userContext.userId, auth:PERMISSION_INTEGRATION_MANAGE, scope) {
+            log:printWarn("User lacks permission to delete logger on runtime", userId = userContext.userId, runtimeId = runtimeId, loggerName = loggerName);
+            return error(string `Access denied: insufficient permissions to delete logger on runtime ${runtimeId}`);
+        }
+
+        log:printDebug("Runtime validated for logger deletion", runtimeId = runtimeId, loggerName = loggerName, componentId = runtime.component.id);
+        validatedRuntimes.push({
+            runtimeId: runtimeId,
+            componentId: runtime.component.id,
+            runtime: runtime
+        });
+    }
+
+    if validatedRuntimes.length() == 0 {
+        log:printWarn("No valid runtimes found to delete logger", loggerName = loggerName);
+        return {
+            success: false,
+            message: "No valid runtimes found to delete logger"
+        };
+    }
+
+    log:printDebug("deleteLoggerMI: calling MI management API", loggerName = loggerName, validatedRuntimeCount = validatedRuntimes.length());
+    int successCount = 0;
+    int failureCount = 0;
+
+    foreach types:ValidatedRuntime validated in validatedRuntimes {
+        string baseUrl = check storage:buildManagementBaseUrl(
+                validated.runtime.managementHostname,
+                validated.runtime.managementPort
+        );
+        log:printDebug("Calling MI management API to delete logger", runtimeId = validated.runtimeId, loggerName = loggerName, baseUrl = baseUrl);
+
+        http:Client|error mgmtClientResult = artifactsApiAllowInsecureTLS
+            ? new (baseUrl, {secureSocket: {enable: false}})
+            : new (baseUrl);
+
+        if mgmtClientResult is error {
+            log:printError("Failed to create management API client for runtime",
+                    runtimeId = validated.runtimeId,
+                    'error = mgmtClientResult);
+            failureCount += 1;
+            continue;
+        }
+
+        string|error hmacTokenResult = storage:issueRuntimeHmacToken(validated.runtimeId);
+        if hmacTokenResult is error {
+            log:printError("Failed to generate HMAC token for runtime",
+                    runtimeId = validated.runtimeId,
+                    'error = hmacTokenResult);
+            failureCount += 1;
+            continue;
+        }
+
+        types:MgmtDeleteLoggerResponse|error deleteResult = mi_management:deleteLogger(
+                mgmtClientResult,
+                hmacTokenResult,
+                loggerName
+        );
+
+        if deleteResult is error {
+            log:printError("Failed to delete logger on runtime",
+                    runtimeId = validated.runtimeId,
+                    loggerName = loggerName,
+                    'error = deleteResult);
+            failureCount += 1;
+        } else {
+            log:printInfo("Successfully deleted logger on runtime",
+                    runtimeId = validated.runtimeId,
+                    loggerName = loggerName);
+            successCount += 1;
+        }
+    }
+
+    if successCount == 0 {
+        log:printError("Failed to delete logger on all runtimes", loggerName = loggerName, failureCount = failureCount);
+        return {
+            success: false,
+            message: string `Failed to delete logger ${loggerName} on all ${failureCount} runtime(s)`
+        };
+    }
+
+    string message = successCount == validatedRuntimes.length()
+        ? string `Successfully deleted logger ${loggerName} from all ${successCount} runtime(s)`
+        : string `Deleted logger ${loggerName} from ${successCount} runtime(s), failed on ${failureCount} runtime(s)`;
+
+    return {success: true, message: message};
+}
+
 isolated function validateRegistryResourceAccess(
         types:UserContextV2 userContext,
         string runtimeId,
@@ -1752,7 +1859,35 @@ service /graphql on graphqlListener {
         };
     }
 
-    // Update log level for BI and MI runtimes
+    isolated remote function deleteLogger(graphql:Context context, types:DeleteLoggerInput input) returns types:DeleteLoggerResponse|error {
+        types:UserContextV2 userContext = check extractUserContext(context);
+        log:printDebug("deleteLogger request received", userId = userContext.userId, loggerName = input.loggerName, runtimeCount = input.runtimeIds.length());
+
+        if input.runtimeIds.length() == 0 {
+            return error("At least one runtime ID must be provided");
+        }
+        if input.loggerName.trim().length() == 0 {
+            log:printWarn("Empty logger name provided", userId = userContext.userId);
+            return error("Logger name is required");
+        }
+
+        string[] nonMiIds = [];
+        foreach string runtimeId in input.runtimeIds {
+            types:Runtime? runtime = check storage:getRuntimeById(runtimeId);
+            if runtime is () {
+                continue;
+            }
+            if runtime.component.componentType != types:MI {
+                nonMiIds.push(runtimeId);
+            }
+        }
+        if nonMiIds.length() > 0 {
+            return error(string `Only MI runtimes supported, invalid runtimeIds: ${nonMiIds.toString()}`);
+        }
+
+        return check deleteLoggerMI(userContext, input);
+    }
+
     isolated remote function updateLogLevel(graphql:Context context, types:UpdateLogLevelInput input) returns types:UpdateLogLevelResponse|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 

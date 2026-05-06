@@ -244,6 +244,11 @@ public type MgmtUpdateLoggerResponse record {
     string message;
 };
 
+// DELETE /management/logging?loggerName=<name> - Response
+public type MgmtDeleteLoggerResponse record {
+    string message;
+};
+
 // Registry API Client
 public type RegistryApiClient record {|
     http:Client mgmtClient;

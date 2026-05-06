@@ -351,6 +351,26 @@ export function useUpdateLogLevel() {
   });
 }
 
+const DELETE_LOGGER = `
+  mutation DeleteLogger($input: DeleteLoggerInput!) {
+    deleteLogger(input: $input) {
+      success, message
+    }
+  }`;
+
+export function useDeleteLogger() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ runtimeIds, loggerName }: { runtimeIds: string[]; loggerName: string }) =>
+      gql<{ deleteLogger: { success: boolean; message: string } }>(DELETE_LOGGER, {
+        input: { runtimeIds, loggerName },
+      }).then((d) => d.deleteLogger),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['loggers'] });
+    },
+  });
+}
+
 // ── Org-level Secrets ──
 
 const CREATE_ORG_SECRET = `
