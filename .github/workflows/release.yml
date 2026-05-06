@@ -141,17 +141,14 @@ jobs:
           # Update icpVersion default in icp_server/config.bal
           sed -i "s/^configurable string icpVersion = \".*\";/configurable string icpVersion = \"${ESCAPED_VERSION}\";/" icp_server/config.bal
 
-          # Update VITE_ICP_VERSION in both config.json files (dev + bundled www)
+          # Update VITE_ICP_VERSION in frontend source config
           jq --arg v "$VERSION" '.VITE_ICP_VERSION = $v' frontend/public/config.json > /tmp/config.json && mv /tmp/config.json frontend/public/config.json
-          jq --arg v "$VERSION" '.VITE_ICP_VERSION = $v' www/config.json > /tmp/config.json && mv /tmp/config.json www/config.json
 
           # Verify changes
           echo "=== icp_server/config.bal ==="
           grep icpVersion icp_server/config.bal
           echo "=== frontend/public/config.json ==="
           jq .VITE_ICP_VERSION frontend/public/config.json
-          echo "=== www/config.json ==="
-          jq .VITE_ICP_VERSION www/config.json
 
       - name: Build distribution package
         run: ./gradlew clean build
@@ -181,13 +178,6 @@ jobs:
           echo "Extracted to: $EXTRACT_DIR"
           ls -la "$EXTRACT_DIR"
 
-      - name: Install Trivy
-        run: |
-          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
-          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
-          sudo apt-get update -qq
-          sudo apt-get install -y trivy
-
       - name: Run Trivy security scan
         uses: aquasecurity/trivy-action@0.35.0
         with:
@@ -197,11 +187,10 @@ jobs:
           output: "trivy-results.sarif"
           severity: "CRITICAL,HIGH"
           exit-code: "0"
-          skip-setup-trivy: true
 
       - name: Upload Trivy scan results to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: ${{ always() && hashFiles('trivy-results.sarif') != '' }}
         with:
           sarif_file: "trivy-results.sarif"
 
