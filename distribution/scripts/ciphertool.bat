@@ -74,12 +74,12 @@ echo This environment variable is needed to run this program
 goto end
 
 :okHome
-REM Build classpath from lib directory
+REM Build classpath from ciphertool-libs directory
 setlocal EnableDelayedExpansion
 cd "%ICP_HOME%"
 
 set ICP_CLASSPATH=
-FOR %%c in ("%ICP_HOME%\lib\*.jar") DO (
+FOR %%c in ("%ICP_HOME%\ciphertool-libs\*.jar") DO (
     set ICP_CLASSPATH=!ICP_CLASSPATH!;"%%c"
 )
 

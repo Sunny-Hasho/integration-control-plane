@@ -65,6 +65,41 @@ detect_java_opts() {
             "-Dio.netty.handler.ssl.noOpenSsl=true"
         )
     fi
+
+    local arch os
+    arch="$(uname -m 2>/dev/null)"
+    os="$(uname -s 2>/dev/null)"
+    case "$arch" in
+        aarch64|arm64)
+            case "$os" in
+                MINGW*|MSYS*|CYGWIN*)
+                    echo "ARM Windows detected - disabling native Netty tcnative libraries"
+                    JAVA_OPTS+=(
+                        "-Dio.netty.transport.noNative=true"
+                        "-Dio.netty.handler.ssl.noOpenSsl=true"
+                    )
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+build_classpath() {
+    local cp="$JAR_FILE"
+    local lib_dir="$PARENT_DIR/lib"
+    if [ -d "$lib_dir" ]; then
+        for f in "$lib_dir"/*.jar; do
+            [ -f "$f" ] && cp="$cp:$f"
+        done
+    fi
+    echo "$cp"
+}
+
+get_main_class() {
+    if command -v unzip >/dev/null 2>&1 && [ -f "$JAR_FILE" ]; then
+        unzip -p "$JAR_FILE" META-INF/MANIFEST.MF 2>/dev/null | \
+            awk -F': ' '/^Main-Class:/ {gsub("\r", "", $2); print $2; exit}'
+    fi
 }
 
 is_running() {
@@ -101,14 +136,22 @@ run_server() {
         unset BAL_CONFIG_FILES
     fi
 
+    local icp_classpath icp_main_class
+    icp_classpath="$(build_classpath)"
+    icp_main_class="$(get_main_class)"
+    if [ -z "$icp_main_class" ]; then
+        echo "Error: Cannot determine main class from $JAR_FILE. Ensure 'unzip' is installed."
+        exit 1
+    fi
+
     if [ "$mode" = "background" ]; then
-        nohup java "${JAVA_OPTS[@]}" -jar "$JAR_FILE" "$@" >> "$LOG_FILE" 2>&1 &
+        nohup java "${JAVA_OPTS[@]}" -cp "$icp_classpath" "$icp_main_class" "$@" >> "$LOG_FILE" 2>&1 &
         server_pid=$!
         echo "$server_pid" > "$PID_FILE"
         echo "ICP Server started with PID $server_pid"
         echo "Logs are available at $LOG_FILE"
     else
-        exec java "${JAVA_OPTS[@]}" -jar "$JAR_FILE" "$@"
+        exec java "${JAVA_OPTS[@]}" -cp "$icp_classpath" "$icp_main_class" "$@"
     fi
 }
 

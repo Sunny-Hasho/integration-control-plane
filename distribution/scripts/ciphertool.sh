@@ -98,9 +98,9 @@ if $mingw ; then
     JAVA_HOME="`(cd "$JAVA_HOME"; pwd)`"
 fi
 
-# Build classpath from lib directory - all JARs in lib/ are included
+# Build classpath from ciphertool-libs directory - all JARs in ciphertool-libs/ are included
 ICP_CLASSPATH=""
-for f in "$ICP_HOME"/lib/*.jar
+for f in "$ICP_HOME"/ciphertool-libs/*.jar
 do
   ICP_CLASSPATH=$ICP_CLASSPATH:$f
 done
