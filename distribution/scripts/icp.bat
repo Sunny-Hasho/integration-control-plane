@@ -28,13 +28,13 @@ set LOG_DIR=!PARENT_DIR!\logs
 set LOG_FILE=!LOG_DIR!\icp.log
 set COMMAND=run
 set "JAVA_OPTS="
-if /I "!PROCESSOR_ARCHITECTURE!"=="ARM64" (
-    echo ARM Windows detected - disabling native Netty tcnative libraries
-    set "JAVA_OPTS=-Dio.netty.transport.noNative=true -Dio.netty.handler.ssl.noOpenSsl=true"
-) else if /I "!PROCESSOR_ARCHITEW6432!"=="ARM64" (
-    echo ARM Windows detected - disabling native Netty tcnative libraries
-    set "JAVA_OPTS=-Dio.netty.transport.noNative=true -Dio.netty.handler.ssl.noOpenSsl=true"
-)
+if /I "!PROCESSOR_ARCHITECTURE!"=="ARM64" goto set_arm_opts
+if /I "!PROCESSOR_ARCHITEW6432!"=="ARM64" goto set_arm_opts
+goto after_arm_opts
+:set_arm_opts
+echo ARM Windows detected - disabling native Netty tcnative libraries
+set "JAVA_OPTS=-Dio.netty.transport.noNative=true -Dio.netty.handler.ssl.noOpenSsl=true"
+:after_arm_opts
 set "ARG=%~1"
 set "NORMALIZED_ARG=!ARG!"
 set "CANDIDATE="
@@ -274,7 +274,11 @@ goto end
 :runServer
 call :prepareRun
 if errorlevel 1 goto end
-java !JAVA_OPTS! -jar "!JAR_FILE!" !FORWARD_ARGS!
+set "QUOTED_JAVA_OPTS="
+if defined JAVA_OPTS (
+    for %%O in (%JAVA_OPTS%) do set "QUOTED_JAVA_OPTS=!QUOTED_JAVA_OPTS! "%%O""
+)
+java !QUOTED_JAVA_OPTS! -jar "!JAR_FILE!" !FORWARD_ARGS!
 if exist "!PID_FILE!" del /f /q "!PID_FILE!" >nul 2>&1
 
 :end
