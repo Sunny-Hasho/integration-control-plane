@@ -28,13 +28,13 @@ set LOG_DIR=!PARENT_DIR!\logs
 set LOG_FILE=!LOG_DIR!\icp.log
 set COMMAND=run
 set "JAVA_OPTS="
-if /I "!PROCESSOR_ARCHITECTURE!"=="ARM64" goto set_arm_opts
-if /I "!PROCESSOR_ARCHITEW6432!"=="ARM64" goto set_arm_opts
-goto after_arm_opts
-:set_arm_opts
-echo ARM Windows detected - disabling native Netty tcnative libraries
-set "JAVA_OPTS=-Dio.netty.transport.noNative=true -Dio.netty.handler.ssl.noOpenSsl=true"
-:after_arm_opts
+if /I "!PROCESSOR_ARCHITECTURE!"=="ARM64" (
+    echo ARM Windows detected - disabling native Netty tcnative libraries
+    set "JAVA_OPTS=-Dio.netty.transport.noNative=true -Dio.netty.handler.ssl.noOpenSsl=true"
+) else if /I "!PROCESSOR_ARCHITEW6432!"=="ARM64" (
+    echo ARM Windows detected - disabling native Netty tcnative libraries
+    set "JAVA_OPTS=-Dio.netty.transport.noNative=true -Dio.netty.handler.ssl.noOpenSsl=true"
+)
 set "ARG=%~1"
 set "NORMALIZED_ARG=!ARG!"
 set "CANDIDATE="
