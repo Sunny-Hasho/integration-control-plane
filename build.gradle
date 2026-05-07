@@ -279,8 +279,15 @@ task packageICP {
                 logger.warning("Please ensure distribution/scripts folder exists with run.sh and run.bat")
             }
 
-            // Copy cipher tool JARs to lib/ directory
-            def libDir = file("${rootDir}/lib")
+            // Create lib/ directory for additional server-side JARs
+            def serverLibDir = file("${rootDir}/lib")
+            if (!serverLibDir.exists()) {
+                serverLibDir.mkdirs()
+            }
+            logger.info("Created lib/ directory")
+
+            // Copy cipher tool JARs to ciphertool-libs/ directory
+            def libDir = file("${rootDir}/ciphertool-libs")
             if (!libDir.exists()) {
                 libDir.mkdirs()
             }
@@ -288,7 +295,7 @@ task packageICP {
                 from configurations.cipherTool
                 into libDir
             }
-            logger.info("Added cipher tool JARs to lib/")
+            logger.info("Added cipher tool JARs to ciphertool-libs/")
 
             // Copy cipher tool config files from distribution/src/main/resources/conf/
             def cipherStandaloneConfig = file('distribution/src/main/resources/conf/cipher-standalone-config.properties')
