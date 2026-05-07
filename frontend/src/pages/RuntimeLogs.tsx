@@ -61,6 +61,7 @@ const DISPLAY_FIELDS: { key: keyof LogRow; label: string }[] = [
   { key: 'logContext', label: 'Log Context' },
   { key: 'componentVersion', label: 'Component Version' },
   { key: 'componentVersionId', label: 'Component Version ID' },
+  { key: 'error', label: 'Error' },
 ];
 
 function levelColor(level: string): string {

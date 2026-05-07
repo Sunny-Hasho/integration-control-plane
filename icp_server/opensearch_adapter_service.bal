@@ -36,9 +36,10 @@ const int COL_ICP_RUNTIME_ID = 12;
 const int COL_LOG_CONTEXT = 13;
 const int COL_COMPONENT_VERSION = 14;
 const int COL_COMPONENT_VERSION_ID = 15;
+const int COL_ERROR = 16;
 // Internal fields for deduplication (not returned to client)
-const int COL_RAW_MESSAGE = 16;
-const int COL_RAW_TIME = 17;
+const int COL_RAW_MESSAGE = 17;
+const int COL_RAW_TIME = 18;
 
 // OpenSearch response types
 type OpenSearchShards record {
@@ -70,6 +71,7 @@ type LogSource record {
     string? artifact_container?;
     string? 'class?;
     string? traceId?;
+    json? 'error?;
 };
 
 type OpenSearchHit record {
@@ -197,7 +199,8 @@ service /observability on openSerachObservabilityListener {
             {name: "IcpRuntimeId", 'type: "dynamic"},
             {name: "LogContext", 'type: "dynamic"},
             {name: "ComponentVersion", 'type: "string"},
-            {name: "ComponentVersionId", 'type: "string"}
+            {name: "ComponentVersionId", 'type: "string"},
+            {name: "Error", 'type: "dynamic"}
         ];
 
         // Build response rows
@@ -219,6 +222,9 @@ service /observability on openSerachObservabilityListener {
             string? artifactContainer = sourceData?.artifact_container ?: ();
             string product = sourceData?.product ?: "";
             string icpRuntimeId = sourceData?.icp_runtimeId ?: "";
+
+            // Extract error details if present
+            json? errorData = sourceData?.'error;
 
             // Extract raw message and time for deduplication
             string rawMessage = sourceData?.message ?: "";
@@ -244,8 +250,9 @@ service /observability on openSerachObservabilityListener {
                 (), // COL_LOG_CONTEXT (13) - null for now
                 "", // COL_COMPONENT_VERSION (14)
                 "", // COL_COMPONENT_VERSION_ID (15)
-                rawMessage, // COL_RAW_MESSAGE (16) - for deduplication
-                rawTime // COL_RAW_TIME (17) - for deduplication
+                errorData, // COL_ERROR (16)
+                rawMessage, // COL_RAW_MESSAGE (17) - for deduplication
+                rawTime // COL_RAW_TIME (18) - for deduplication
             ];
             rows.push(row);
         }
@@ -260,10 +267,10 @@ service /observability on openSerachObservabilityListener {
         // Trim internal deduplication fields before returning to client
         json[][] clientRows = [];
         foreach json[] row in deduplicatedRows {
-            // Return only the first 16 columns (exclude COL_RAW_MESSAGE and COL_RAW_TIME)
+            // Return only the first 17 columns (exclude COL_RAW_MESSAGE and COL_RAW_TIME)
             json[] clientRow = [];
             int i = 0;
-            while i <= COL_COMPONENT_VERSION_ID {
+            while i <= COL_ERROR {
                 clientRow.push(row[i]);
                 i += 1;
             }
