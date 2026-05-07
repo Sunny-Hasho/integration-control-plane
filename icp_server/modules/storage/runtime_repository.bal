@@ -263,20 +263,20 @@ type ApiRecordInDB record {|
     string state;
     string tracing;
     string statistics;
-    string? carbon_app;
+    string? composite_app;
 |};
 
 public isolated function getApisForRuntime(string runtimeId) returns types:RestApi[]|error {
     sql:ParameterizedQuery apiQuery;
     if isMSSQL() {
         apiQuery = `
-            SELECT api_name, url, urls, context, version, state, tracing, [statistics], carbon_app
+            SELECT api_name, url, urls, context, version, state, tracing, [statistics], composite_app
             FROM mi_api_artifacts
             WHERE runtime_id = ${runtimeId}
         `;
     } else {
         apiQuery = `
-            SELECT api_name, url, urls, context, version, state, tracing, statistics, carbon_app
+            SELECT api_name, url, urls, context, version, state, tracing, statistics, composite_app
             FROM mi_api_artifacts
             WHERE runtime_id = ${runtimeId}
         `;
@@ -303,7 +303,7 @@ public isolated function getApisForRuntime(string runtimeId) returns types:RestA
             state: <types:ArtifactState>rec.state,
             tracing: rec.tracing,
             statistics: rec.statistics,
-            carbonApp: rec.carbon_app,
+            compositeApp: rec.composite_app,
             resources: resources
         });
     }
@@ -352,13 +352,13 @@ public isolated function getProxyServicesForRuntime(string runtimeId) returns ty
     sql:ParameterizedQuery proxyQuery;
     if isMSSQL() {
         proxyQuery = `
-            SELECT proxy_name, state, tracing, [statistics], carbon_app
+            SELECT proxy_name, state, tracing, [statistics], composite_app
             FROM mi_proxy_service_artifacts
             WHERE runtime_id = ${runtimeId}
         `;
     } else {
         proxyQuery = `
-            SELECT proxy_name, state, tracing, statistics, carbon_app
+            SELECT proxy_name, state, tracing, statistics, composite_app
             FROM mi_proxy_service_artifacts
             WHERE runtime_id = ${runtimeId}
         `;
@@ -372,7 +372,7 @@ public isolated function getProxyServicesForRuntime(string runtimeId) returns ty
                 state: proxyRecord.state,
                 tracing: proxyRecord.tracing,
                 statistics: proxyRecord.statistics,
-                carbonApp: proxyRecord.carbon_app
+                compositeApp: proxyRecord.composite_app
             };
             string[] eps = endpointMap[proxyRecord.proxy_name] ?: [];
             proxy.endpoints = eps;
@@ -392,13 +392,13 @@ public isolated function getEndpointsForRuntime(string runtimeId) returns types:
     sql:ParameterizedQuery endpointQuery;
     if isMSSQL() {
         endpointQuery = `
-            SELECT endpoint_name, endpoint_type, state, tracing, [statistics], carbon_app
+            SELECT endpoint_name, endpoint_type, state, tracing, [statistics], composite_app
             FROM mi_endpoint_artifacts
             WHERE runtime_id = ${runtimeId}
         `;
     } else {
         endpointQuery = `
-            SELECT endpoint_name, endpoint_type, state, tracing, statistics, carbon_app
+            SELECT endpoint_name, endpoint_type, state, tracing, statistics, composite_app
             FROM mi_endpoint_artifacts
             WHERE runtime_id = ${runtimeId}
         `;
@@ -431,7 +431,7 @@ public isolated function getEndpointsForRuntime(string runtimeId) returns types:
             state: rec.state,
             tracing: rec.tracing,
             statistics: rec.statistics,
-            carbonApp: rec.carbon_app
+            compositeApp: rec.composite_app
         };
         types:EndpointAttribute[]? attrs = attrMap[rec.endpoint_name];
         if attrs is types:EndpointAttribute[] && attrs.length() > 0 {
@@ -448,13 +448,13 @@ public isolated function getInboundEndpointsForRuntime(string runtimeId) returns
     sql:ParameterizedQuery query;
     if isMSSQL() {
         query = `
-            SELECT inbound_name, protocol, sequence, state, [statistics], on_error, tracing, carbon_app
+            SELECT inbound_name, protocol, sequence, state, [statistics], on_error, tracing, composite_app
             FROM mi_inbound_endpoint_artifacts 
             WHERE runtime_id = ${runtimeId}
         `;
     } else {
         query = `
-            SELECT inbound_name, protocol, sequence, state, statistics, on_error, tracing, carbon_app
+            SELECT inbound_name, protocol, sequence, state, statistics, on_error, tracing, composite_app
             FROM mi_inbound_endpoint_artifacts 
             WHERE runtime_id = ${runtimeId}
         `;
@@ -475,13 +475,13 @@ public isolated function getSequencesForRuntime(string runtimeId) returns types:
     sql:ParameterizedQuery sequenceQuery;
     if isMSSQL() {
         sequenceQuery = `
-            SELECT sequence_name, sequence_type, container, state, tracing, [statistics], carbon_app
+            SELECT sequence_name, sequence_type, container, state, tracing, [statistics], composite_app
             FROM mi_sequence_artifacts
             WHERE runtime_id = ${runtimeId}
         `;
     } else {
         sequenceQuery = `
-            SELECT sequence_name, sequence_type, container, state, tracing, statistics, carbon_app
+            SELECT sequence_name, sequence_type, container, state, tracing, statistics, composite_app
             FROM mi_sequence_artifacts
             WHERE runtime_id = ${runtimeId}
         `;
@@ -497,7 +497,7 @@ public isolated function getSequencesForRuntime(string runtimeId) returns types:
                 state: sequenceRecord.state,
                 tracing: sequenceRecord.tracing,
                 statistics: sequenceRecord.statistics,
-                carbonApp: sequenceRecord.carbon_app
+                compositeApp: sequenceRecord.composite_app
             };
             sequenceList.push(sequence);
         };
@@ -509,7 +509,7 @@ public isolated function getSequencesForRuntime(string runtimeId) returns types:
 public isolated function getTasksForRuntime(string runtimeId) returns types:Task[]|error {
     types:Task[] taskList = [];
     stream<types:TaskRecordInDB, sql:Error?> taskStream = dbClient->query(`
-        SELECT task_name, task_class, task_group, state, carbon_app
+        SELECT task_name, task_class, task_group, state, composite_app
         FROM mi_task_artifacts 
         WHERE runtime_id = ${runtimeId}
     `);
@@ -521,7 +521,7 @@ public isolated function getTasksForRuntime(string runtimeId) returns types:Task
                 'class: taskRecord.task_class,
                 group: taskRecord.task_group,
                 state: taskRecord.state,
-                carbonApp: taskRecord.carbon_app
+                compositeApp: taskRecord.composite_app
             };
             taskList.push(task);
         };
@@ -535,13 +535,13 @@ public isolated function getTemplatesForRuntime(string runtimeId) returns types:
     sql:ParameterizedQuery templateQuery;
     if isMSSQL() {
         templateQuery = `
-            SELECT template_name, template_type, tracing, [statistics], carbon_app
+            SELECT template_name, template_type, tracing, [statistics], composite_app
             FROM mi_template_artifacts
             WHERE runtime_id = ${runtimeId}
         `;
     } else {
         templateQuery = `
-            SELECT template_name, template_type, tracing, statistics, carbon_app
+            SELECT template_name, template_type, tracing, statistics, composite_app
             FROM mi_template_artifacts
             WHERE runtime_id = ${runtimeId}
         `;
@@ -561,7 +561,7 @@ public isolated function getTemplatesForRuntime(string runtimeId) returns types:
 public isolated function getMessageStoresForRuntime(string runtimeId) returns types:MessageStore[]|error {
     types:MessageStore[] storeList = [];
     stream<types:MessageStoreRecordInDB, sql:Error?> storeStream = dbClient->query(`
-        SELECT store_name, store_type, size, carbon_app
+        SELECT store_name, store_type, size, composite_app
         FROM mi_message_store_artifacts 
         WHERE runtime_id = ${runtimeId}
     `);
@@ -572,7 +572,7 @@ public isolated function getMessageStoresForRuntime(string runtimeId) returns ty
                 name: storeRecord.store_name,
                 'type: storeRecord.store_type,
                 size: storeRecord.size,
-                carbonApp: storeRecord.carbon_app
+                compositeApp: storeRecord.composite_app
             };
             storeList.push(store);
         };
@@ -584,7 +584,7 @@ public isolated function getMessageStoresForRuntime(string runtimeId) returns ty
 public isolated function getMessageProcessorsForRuntime(string runtimeId) returns types:MessageProcessor[]|error {
     types:MessageProcessor[] processorList = [];
     stream<types:MessageProcessorRecordInDB, sql:Error?> processorStream = dbClient->query(`
-        SELECT processor_name, processor_type, processor_class, state, carbon_app
+        SELECT processor_name, processor_type, processor_class, state, composite_app
         FROM mi_message_processor_artifacts 
         WHERE runtime_id = ${runtimeId}
     `);
@@ -596,7 +596,7 @@ public isolated function getMessageProcessorsForRuntime(string runtimeId) return
                 'type: processorRecord.processor_type,
                 'class: processorRecord.processor_class,
                 state: processorRecord.state,
-                carbonApp: processorRecord.carbon_app
+                compositeApp: processorRecord.composite_app
             };
             processorList.push(processor);
         };
@@ -608,7 +608,7 @@ public isolated function getMessageProcessorsForRuntime(string runtimeId) return
 public isolated function getLocalEntriesForRuntime(string runtimeId) returns types:LocalEntry[]|error {
     types:LocalEntry[] entryList = [];
     stream<types:LocalEntryRecordInDB, sql:Error?> entryStream = dbClient->query(`
-        SELECT entry_name, entry_type, entry_value, state, carbon_app
+        SELECT entry_name, entry_type, entry_value, state, composite_app
         FROM mi_local_entry_artifacts 
         WHERE runtime_id = ${runtimeId}
     `);
@@ -620,7 +620,7 @@ public isolated function getLocalEntriesForRuntime(string runtimeId) returns typ
                 'type: entryRecord.entry_type,
                 value: entryRecord.entry_value,
                 state: entryRecord.state,
-                carbonApp: entryRecord.carbon_app
+                compositeApp: entryRecord.composite_app
             };
             entryList.push(entry);
         };
@@ -632,7 +632,7 @@ public isolated function getLocalEntriesForRuntime(string runtimeId) returns typ
 public isolated function getDataServicesForRuntime(string runtimeId) returns types:DataService[]|error {
     types:DataService[] serviceList = [];
     stream<types:DataService, sql:Error?> serviceStream = dbClient->query(`
-        SELECT service_name, description, wsdl, state, carbon_app
+        SELECT service_name, description, wsdl, state, composite_app
         FROM mi_data_service_artifacts 
         WHERE runtime_id = ${runtimeId}
     `);
@@ -645,34 +645,34 @@ public isolated function getDataServicesForRuntime(string runtimeId) returns typ
     return serviceList;
 }
 
-// Get carbon apps for a specific runtime
-public isolated function getCarbonAppsForRuntime(string runtimeId) returns types:CarbonApp[]|error {
-    log:printDebug("Fetching carbon apps for runtime: " + runtimeId);
-    types:CarbonApp[] appList = [];
+// Get composite apps for a specific runtime
+public isolated function getCompositeAppsForRuntime(string runtimeId) returns types:CompositeApp[]|error {
+    log:printDebug("Fetching composite apps for runtime: " + runtimeId);
+    types:CompositeApp[] appList = [];
     // Include artifacts column (serialized JSON string) if present
     stream<record {string app_name; string? version; types:DeploymentState state; string? error_message?; string artifacts?;}, sql:Error?> appStream = dbClient->query(`
         SELECT app_name, version, state, error_message, artifacts
-        FROM mi_carbon_app_artifacts
+        FROM mi_composite_app_artifacts
         WHERE runtime_id = ${runtimeId}
     `);
 
     check from record {string app_name; string? version; types:DeploymentState state; string? error_message?; string artifacts?;} appRecord in appStream
         do {
-            types:CarbonApp app = {
+            types:CompositeApp app = {
                 name: appRecord.app_name,
                 version: appRecord.version,
                 state: appRecord.state,
                 errorMessage: appRecord?.error_message
             };
             if appRecord.artifacts is string {
-                // Attempt to parse JSON string to CarbonAppArtifact[]
+                // Attempt to parse JSON string to CompositeAppArtifact[]
                 string versionForLog = appRecord.version ?: "";
-                log:printDebug("Parsing artifacts for carbon app: " + appRecord.app_name + " version: " + versionForLog);
+                log:printDebug("Parsing artifacts for composite app: " + appRecord.app_name + " version: " + versionForLog);
                 string artStr = <string>appRecord.artifacts;
                 json|error parsed = value:fromJsonString(artStr);
                 if parsed is json {
-                    types:CarbonAppArtifact[]|error arts = parseCarbonAppArtifacts(parsed);
-                    if arts is types:CarbonAppArtifact[] {
+                    types:CompositeAppArtifact[]|error arts = parseCompositeAppArtifacts(parsed);
+                    if arts is types:CompositeAppArtifact[] {
                         app.artifacts = arts;
                     }
                 }
@@ -683,16 +683,16 @@ public isolated function getCarbonAppsForRuntime(string runtimeId) returns types
     return appList;
 }
 
-// Parse a JSON value into CarbonAppArtifact[]; expects an array of objects with name and type
-isolated function parseCarbonAppArtifacts(json j) returns types:CarbonAppArtifact[]|error {
+// Parse a JSON value into CompositeAppArtifact[]; expects an array of objects with name and type
+isolated function parseCompositeAppArtifacts(json j) returns types:CompositeAppArtifact[]|error {
     if j is json[] {
-        types:CarbonAppArtifact[] result = [];
+        types:CompositeAppArtifact[] result = [];
         foreach json item in j {
             if item is map<json> {
                 string? name = <string?>item["name"];
                 string? typ = <string?>item["type"];
                 if name is string && typ is string {
-                    types:CarbonAppArtifact art = {name: name, 'type: typ};
+                    types:CompositeAppArtifact art = {name: name, 'type: typ};
                     result.push(art);
                 }
             }
@@ -779,7 +779,7 @@ public isolated function mapToRuntime(types:RuntimeDBRecord runtimeRecord) retur
     types:MessageProcessor[] processorList = [];
     types:LocalEntry[] entryList = [];
     types:DataService[] dataServiceList = [];
-    types:CarbonApp[] appList = [];
+    types:CompositeApp[] appList = [];
     types:DataSource[] sourceList = [];
     types:Connector[] connectorList = [];
     types:RegistryResource[] resourceList = [];
@@ -797,7 +797,7 @@ public isolated function mapToRuntime(types:RuntimeDBRecord runtimeRecord) retur
         processorList = check getMessageProcessorsForRuntime(runtimeRecord.runtime_id);
         entryList = check getLocalEntriesForRuntime(runtimeRecord.runtime_id);
         dataServiceList = check getDataServicesForRuntime(runtimeRecord.runtime_id);
-        appList = check getCarbonAppsForRuntime(runtimeRecord.runtime_id);
+        appList = check getCompositeAppsForRuntime(runtimeRecord.runtime_id);
         sourceList = check getDataSourcesForRuntime(runtimeRecord.runtime_id);
         connectorList = check getConnectorsForRuntime(runtimeRecord.runtime_id);
         resourceList = check getRegistryResourcesForRuntime(runtimeRecord.runtime_id);

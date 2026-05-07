@@ -120,14 +120,14 @@ type Query {
     environmentId: String!
     componentId: String!
   ): [DataSource!]!
-  carbonAppsByEnvironmentAndComponent(
+  compositeAppsByEnvironmentAndComponent(
     environmentId: String!
     componentId: String!
-  ): [CarbonApp!]!
-  carbonAppFaultStackTrace(
+  ): [CompositeApp!]!
+  compositeAppFaultStackTrace(
     runtimeId: String!
     appName: String!
-  ): CarbonAppFaultStackTrace
+  ): CompositeAppFaultStackTrace
   connectorsByEnvironmentAndComponent(
     environmentId: String!
     componentId: String!
@@ -359,7 +359,7 @@ type RestApi {
   state: ArtifactState!
   tracing: String!
   statistics: String!
-  carbonApp: String
+  compositeApp: String
   resources: [ApiResource!]!
 }
 
@@ -379,7 +379,7 @@ type ProxyService {
   state: ArtifactState!
   tracing: String!
   statistics: String!
-  carbonApp: String
+  compositeApp: String
   endpoints: [String!]
 }
 
@@ -392,7 +392,7 @@ type MIEndpoint {
   state: ArtifactState!
   tracing: String!
   statistics: String!
-  carbonApp: String
+  compositeApp: String
   attributes: [EndpointAttribute!]
 }
 
@@ -415,7 +415,7 @@ type InboundEndpoint {
   statistics: String
   onError: String
   tracing: String!
-  carbonApp: String
+  compositeApp: String
 }
 
 # ============================================
@@ -428,7 +428,7 @@ type Sequence {
   state: ArtifactState!
   tracing: String!
   statistics: String!
-  carbonApp: String
+  compositeApp: String
 }
 
 # ============================================
@@ -439,7 +439,7 @@ type Task {
   class: String
   group: String
   state: ArtifactState!
-  carbonApp: String
+  compositeApp: String
   runtimes: [ArtifactRuntimeInfo]
 }
 
@@ -451,7 +451,7 @@ type Template {
   type: String!
   statistics: String!
   tracing: String!
-  carbonApp: String
+  compositeApp: String
 }
 
 # ============================================
@@ -462,7 +462,7 @@ type MessageStore {
   type: String!
   size: Int!
   state: ArtifactState!
-  carbonApp: String
+  compositeApp: String
 }
 
 # ============================================
@@ -473,7 +473,7 @@ type MessageProcessor {
   type: String!
   class: String
   state: ArtifactState!
-  carbonApp: String
+  compositeApp: String
 }
 
 # ============================================
@@ -484,7 +484,7 @@ type LocalEntry {
   type: String!
   value: String
   state: ArtifactState!
-  carbonApp: String
+  compositeApp: String
   runtimes: [ArtifactRuntimeInfo]
 }
 
@@ -496,7 +496,7 @@ type DataService {
   description: String
   wsdl: String
   state: ArtifactState!
-  carbonApp: String
+  compositeApp: String
 }
 
 # ============================================
@@ -512,28 +512,28 @@ type DataSource {
 }
 
 # ============================================
-# CarbonApp Type - MI Carbon Application Artifacts
+# CompositeApp Type - MI Composite Application Artifacts
 # ============================================
-type CarbonApp {
+type CompositeApp {
   name: String!
   version: String
   state: String!
   errorMessage: String
   faultStackTrace: String
-  artifacts: [CarbonAppArtifact!]
+  artifacts: [CompositeAppArtifact!]
   runtimes: [ArtifactRuntimeInfo]
 }
 
-type CarbonAppFaultStackTrace {
+type CompositeAppFaultStackTrace {
   runtimeId: String!
   appName: String!
   faultStackTrace: String!
 }
 
 # ============================================
-# CarbonAppArtifact Type - Artifact within Carbon App
+# CompositeAppArtifact Type - Artifact within Composite App
 # ============================================
-type CarbonAppArtifact {
+type CompositeAppArtifact {
   name: String!
   type: String!
 }

@@ -309,7 +309,7 @@ isolated function countTotalArtifacts(types:Artifacts artifacts) returns int {
 
     totalArtifacts += (<types:DataService[]>artifacts.dataServices).length();
 
-    totalArtifacts += (<types:CarbonApp[]>artifacts.carbonApps).length();
+    totalArtifacts += (<types:CompositeApp[]>artifacts.carbonApps).length();
 
     totalArtifacts += (<types:DataSource[]>artifacts.dataSources).length();
 

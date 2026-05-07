@@ -1008,7 +1008,7 @@ WHERE grm.integration_uuid IS NOT NULL
   - `get listeners`
   - `get listenersByEnvironmentAndComponent`
   - `get restApisByEnvironmentAndComponent`
-  - `get carbonAppsByEnvironmentAndComponent`
+  - `get compositeAppsByEnvironmentAndComponent`
   - `get inboundEndpointsByEnvironmentAndComponent`
   - `get endpointsByEnvironmentAndComponent`
   - `get sequencesByEnvironmentAndComponent`
