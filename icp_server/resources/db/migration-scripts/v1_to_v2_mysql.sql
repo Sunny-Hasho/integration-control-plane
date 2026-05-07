@@ -341,7 +341,7 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 SET @sql = CONCAT('
-    CREATE TABLE IF NOT EXISTS `', @new_main_db, '`.mi_carbon_app_artifacts (
+    CREATE TABLE IF NOT EXISTS `', @new_main_db, '`.mi_composite_app_artifacts (
         runtime_id CHAR(36) NOT NULL,
         app_name VARCHAR(200) NOT NULL,
         version VARCHAR(50) NULL,
@@ -351,7 +351,7 @@ SET @sql = CONCAT('
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (runtime_id, app_name),
-        CONSTRAINT fk_mi_carbon_app_artifacts_runtime FOREIGN KEY (runtime_id) REFERENCES `', @new_main_db, '`.runtimes (runtime_id) ON DELETE CASCADE,
+        CONSTRAINT fk_mi_composite_app_artifacts_runtime FOREIGN KEY (runtime_id) REFERENCES `', @new_main_db, '`.runtimes (runtime_id) ON DELETE CASCADE,
         INDEX idx_runtime_id (runtime_id),
         INDEX idx_app_name (app_name),
         INDEX idx_state (state)

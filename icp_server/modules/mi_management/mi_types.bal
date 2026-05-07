@@ -40,7 +40,7 @@ type MgmtRegistryPropertiesResponse record {
     MgmtRegistryProperty[] list;
 };
 
-type MgmtCarbonAppFaultResponse record {
+type MgmtCompositeAppFaultResponse record {
     string name;
     string version?;
     string errorMessage?;

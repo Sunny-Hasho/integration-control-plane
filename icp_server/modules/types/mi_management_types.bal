@@ -202,7 +202,7 @@ public type MgmtDataSourceInfo record {
 };
 
 // GET /management/applications?carbonAppName={name}
-public type MgmtCarbonAppInfo record {
+public type MgmtCompositeAppInfo record {
     string name;
     string version?;
     json artifacts?;

@@ -513,9 +513,9 @@ public isolated function getArtifactTypesForComponent(string componentId, types:
             artifactTypes.push({artifactType: types:DATASERVICE, artifactCount: dataServiceCount});
         }
 
-        int appCount = check getCount(sql:queryConcat(countQuery, `mi_carbon_app_artifacts `, runtimeInClause));
+        int appCount = check getCount(sql:queryConcat(countQuery, `mi_composite_app_artifacts `, runtimeInClause));
         if appCount > 0 {
-            artifactTypes.push({artifactType: types:CARBONAPP, artifactCount: appCount});
+            artifactTypes.push({artifactType: types:COMPOSITEAPP, artifactCount: appCount});
         }
 
         int sourceCount = check getCount(sql:queryConcat(countQuery, `mi_data_source_artifacts `, runtimeInClause));

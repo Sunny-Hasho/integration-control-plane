@@ -125,7 +125,7 @@ function SelectedTypeArtifacts({ artifacts, artifactType, envId, componentId, qu
     return a.name?.toString().toLowerCase().includes(searchQuery);
   });
   const supportsToggle = ['Endpoint', 'Listener', 'MessageProcessor'].includes(artifactType);
-  const hasStateField = ['Connector', 'CarbonApp'].includes(artifactType);
+  const hasStateField = ['Connector', 'CompositeApp'].includes(artifactType);
   const maxPage = Math.max(0, Math.ceil(filtered.length / rowsPerPage) - 1);
   const safePage = Math.min(page, maxPage);
   const paginatedArtifacts = filtered.slice(safePage * rowsPerPage, safePage * rowsPerPage + rowsPerPage);
@@ -264,7 +264,7 @@ function SelectedTypeArtifacts({ artifacts, artifactType, envId, componentId, qu
                         label={(a.state ?? '—').toString().charAt(0).toUpperCase() + (a.state ?? '—').toString().slice(1).toLowerCase()}
                         size="small"
                         variant="outlined"
-                        color={artifactType === 'CarbonApp' ? ((a.state ?? '').toString() === 'Active' ? 'success' : (a.state ?? '').toString() === 'Faulty' ? 'error' : 'default') : enabled ? 'success' : 'default'}
+                        color={artifactType === 'CompositeApp' ? ((a.state ?? '').toString() === 'Active' ? 'success' : (a.state ?? '').toString() === 'Faulty' ? 'error' : 'default') : enabled ? 'success' : 'default'}
                         sx={{ fontSize: '0.875rem' }}
                       />
                     </Grid>
@@ -385,9 +385,9 @@ export function ArtifactTypeSelector({ envId, componentId, onSelectArtifact }: {
 
 const drawerSx = { '& .MuiDrawer-paper': { width: '60%', maxWidth: 700, minWidth: 400, position: 'fixed', top: 64, height: 'calc(100% - 64px)', borderLeft: '1px solid', borderColor: 'divider' } };
 const headerSx = { px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' };
-const CARBON_APP_FAULT_STACKTRACE_QUERY = `
-  query GetCarbonAppFaultStackTrace($runtimeId: String!, $appName: String!) {
-    carbonAppFaultStackTrace(runtimeId: $runtimeId, appName: $appName) {
+const COMPOSITE_APP_FAULT_STACKTRACE_QUERY = `
+  query GetCompositeAppFaultStackTrace($runtimeId: String!, $appName: String!) {
+    compositeAppFaultStackTrace(runtimeId: $runtimeId, appName: $appName) {
       faultStackTrace
     }
   }
@@ -474,8 +474,8 @@ export function ArtifactDetail({ selected, onClose }: { selected: SelectedArtifa
     }
   };
 
-  const isFaultyCarbon = artifactType === 'CarbonApp' && artifact.state?.toString() === 'Faulty';
-  const errorMessage = isFaultyCarbon ? artifact.errorMessage?.toString() : null;
+  const isFaultyCompositeApp = artifactType === 'CompositeApp' && artifact.state?.toString() === 'Faulty';
+  const errorMessage = isFaultyCompositeApp ? artifact.errorMessage?.toString() : null;
   const stacktracePanelId = `stacktrace-panel-${artifactType}-${displayName.replace(/\s+/g, '-').toLowerCase()}`;
   const errorLines = errorMessage
     ? errorMessage
@@ -489,7 +489,7 @@ export function ArtifactDetail({ selected, onClose }: { selected: SelectedArtifa
     const appName = artifact.name?.toString();
 
     if (!runtimeId || !appName) {
-      setStacktraceError('No stacktrace available. Missing runtime or Carbon App name.');
+      setStacktraceError('No stacktrace available. Missing runtime or Composite App name.');
       return;
     }
 
@@ -501,17 +501,17 @@ export function ArtifactDetail({ selected, onClose }: { selected: SelectedArtifa
     setStacktraceError(null);
 
     try {
-      const result = await gql<{ carbonAppFaultStackTrace: { faultStackTrace: string } }>(CARBON_APP_FAULT_STACKTRACE_QUERY, {
+      const result = await gql<{ compositeAppFaultStackTrace: { faultStackTrace: string } }>(COMPOSITE_APP_FAULT_STACKTRACE_QUERY, {
         runtimeId,
         appName,
       });
 
       if (stacktraceRequestRef.current !== requestToken) return;
 
-      setStacktrace(result.carbonAppFaultStackTrace?.faultStackTrace || null);
+      setStacktrace(result.compositeAppFaultStackTrace?.faultStackTrace || null);
       setStacktraceLoadedFor(requestToken);
     } catch (error) {
-      console.error('Error fetching carbon app stacktrace:', error);
+      console.error('Error fetching composite app stacktrace:', error);
       if (stacktraceRequestRef.current === requestToken) {
         setStacktraceError('Failed to load stacktrace.');
       }
@@ -545,7 +545,7 @@ export function ArtifactDetail({ selected, onClose }: { selected: SelectedArtifa
           </IconButton>
         </Stack>
       </Stack>
-      {isFaultyCarbon && (
+      {isFaultyCompositeApp && (
         <Box sx={{ px: 2, pt: 1.5, pb: 3, backgroundColor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}>
           <Stack spacing={0} alignItems="flex-start">
             <Chip label="Faulty" size="small" color="error" sx={{ mt: 0.5 }} />

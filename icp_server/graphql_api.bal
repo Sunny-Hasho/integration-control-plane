@@ -990,8 +990,8 @@ service /graphql on graphqlListener {
         return result;
     }
 
-    // Get Carbon Apps for a specific environment and component
-    isolated resource function get carbonAppsByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:CarbonApp[]|error {
+    // Get Composite Apps for a specific environment and component
+    isolated resource function get compositeAppsByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:CompositeApp[]|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get project ID for the component (lightweight query for access control)
@@ -1007,46 +1007,50 @@ service /graphql on graphqlListener {
 
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
-            log:printWarn("Attempt to access component Carbon Apps without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
+            log:printWarn("Attempt to access component Composite Apps without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
             return [];
         }
 
-        return check storage:getCarbonAppsByEnvironmentAndComponent(environmentId, componentId);
+        return check storage:getCompositeAppsByEnvironmentAndComponent(environmentId, componentId);
     }
 
-    isolated resource function get carbonAppFaultStackTrace(graphql:Context context, string runtimeId, string appName) returns types:CarbonAppFaultStackTrace|error {
+    isolated resource function get compositeAppFaultStackTrace(graphql:Context context, string runtimeId, string appName) returns types:CompositeAppFaultStackTrace|error {
+        string trimmedAppName = appName.trim();
+        if trimmedAppName == "" {
+            return error("App name must not be empty");
+        }
         types:UserContextV2 userContext = check extractUserContext(context);
-        log:printDebug("Fetching Carbon App fault stack trace", userId = userContext.userId, runtimeId = runtimeId, appName = appName);
+        log:printDebug("Fetching Composite App fault stack trace", userId = userContext.userId, runtimeId = runtimeId, appName = trimmedAppName);
 
         types:Runtime? runtime = check storage:getRuntimeById(runtimeId);
         if runtime is () {
-            log:printWarn("Runtime not found for Carbon App fault stack trace query", userId = userContext.userId, runtimeId = runtimeId);
+            log:printWarn("Runtime not found for Composite App fault stack trace query", userId = userContext.userId, runtimeId = runtimeId);
             return error("Runtime not found");
         }
 
         types:AccessScope scope = auth:buildScopeFromContext(runtime.component.projectId, runtime.component.id, runtime.environment.id);
 
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
-            log:printWarn("Attempt to access Carbon App fault stack trace without permission", userId = userContext.userId, runtimeId = runtimeId, appName = appName);
+            log:printWarn("Attempt to access Composite App fault stack trace without permission", userId = userContext.userId, runtimeId = runtimeId, appName = trimmedAppName);
             return error("Unauthorized");
         }
 
         if runtime.status != types:RUNNING {
-            log:printWarn("Runtime is not online for Carbon App fault stack trace query", userId = userContext.userId, runtimeId = runtimeId, status = runtime.status);
+            log:printWarn("Runtime is not online for Composite App fault stack trace query", userId = userContext.userId, runtimeId = runtimeId, status = runtime.status);
             return error("Runtime is not online");
         }
 
         string baseUrl = check storage:buildManagementBaseUrl(runtime.managementHostname, runtime.managementPort);
-        log:printDebug("Calling MI management API for Carbon App fault stack trace", runtimeId = runtimeId, appName = appName, baseUrl = baseUrl);
+        log:printDebug("Calling MI management API for Composite App fault stack trace", runtimeId = runtimeId, appName = trimmedAppName, baseUrl = baseUrl);
         http:Client mgmtClient = check (artifactsApiAllowInsecureTLS
             ? new (baseUrl, {secureSocket: {enable: false}})
             : new (baseUrl));
 
         string hmacToken = check storage:issueRuntimeHmacToken(runtimeId);
 
-        string faultStackTrace = check mi_management:fetchCarbonAppFaultStackTrace(mgmtClient, hmacToken, appName);
-        log:printDebug("Successfully fetched Carbon App fault stack trace", runtimeId = runtimeId, appName = appName);
-        return {runtimeId, appName, faultStackTrace};
+        string faultStackTrace = check mi_management:fetchCompositeAppFaultStackTrace(mgmtClient, hmacToken, trimmedAppName);
+        log:printDebug("Successfully fetched Composite App fault stack trace", runtimeId = runtimeId, appName = trimmedAppName);
+        return {runtimeId, appName: trimmedAppName, faultStackTrace};
     }
 
     // Get Inbound Endpoints for a specific environment and component
