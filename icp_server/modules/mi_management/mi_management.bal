@@ -48,7 +48,6 @@ public const string ARTIFACT_TYPE_CONNECTOR = "connector";
 public const string ARTIFACT_TYPE_TEMPLATE = "template";
 public const string ARTIFACT_TYPE_DATA_SERVICE = "data-service";
 public const string ARTIFACT_TYPE_DATA_SOURCE = "data-source";
-public const string ARTIFACT_TYPE_COMPOSITE_APP = "composite-app";
 
 // ============================================================
 // Artifact-specific fetch functions
