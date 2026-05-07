@@ -798,7 +798,7 @@ isolated function insertRuntimeArtifacts(string runtimeId, types:Heartbeat heart
 }
 
 isolated function deleteMIArtifacts(string runtimeId) returns error? {
-    log:printDebug("Deleting MI artifacts for runtime: " + runtimeId);
+    log:printDebug(string `Deleting MI artifacts for runtime: ${runtimeId}`);
     _ = check dbClient->execute(`DELETE FROM mi_api_resource_artifacts WHERE runtime_id = ${runtimeId}`);
     _ = check dbClient->execute(`DELETE FROM mi_api_artifacts WHERE runtime_id = ${runtimeId}`);
     _ = check dbClient->execute(`DELETE FROM mi_proxy_service_endpoint_artifacts WHERE runtime_id = ${runtimeId}`);
@@ -834,24 +834,16 @@ isolated function deleteExistingArtifacts(string runtimeId) returns error? {
 isolated function insertMIArtifacts(string runtimeId, types:Heartbeat heartbeat) returns error? {
     check deleteMIArtifacts(runtimeId);
     
-    log:printDebug("Inserting MI artifacts for runtime: " + runtimeId);
+    log:printDebug(string `Inserting MI artifacts for runtime: ${runtimeId}`);
     foreach types:RestApi api in <types:RestApi[]>heartbeat.artifacts.apis {
         string artifactId = uuid:createType4AsString();
         string? compositeApp = api?.compositeApp;
         string urlsJson = api.urls.toJsonString();
         if dbType == MSSQL {
             _ = check dbClient->execute(`
-                MERGE INTO mi_api_artifacts AS target
-                USING (VALUES (${runtimeId}, ${api.name}, ${artifactId}, ${api.url}, ${urlsJson}, ${api.context},
-                       ${api.version}, ${api.state}, ${api.tracing}, ${api.statistics}, ${compositeApp}))
-                       AS source (runtime_id, api_name, artifact_id, url, urls, context, version, state, tracing, [statistics], composite_app)
-                ON (target.runtime_id = source.runtime_id AND target.api_name = source.api_name)
-                WHEN MATCHED THEN
-                    UPDATE SET url = source.url, urls = source.urls, context = source.context, version = source.version,
-                               state = source.state, tracing = source.tracing, [statistics] = source.[statistics], composite_app = source.composite_app, updated_at = CURRENT_TIMESTAMP
-                WHEN NOT MATCHED THEN
-                    INSERT (runtime_id, api_name, artifact_id, url, urls, context, version, state, tracing, [statistics], composite_app)
-                    VALUES (source.runtime_id, source.api_name, source.artifact_id, source.url, source.urls, source.context, source.version, source.state, source.tracing, source.[statistics], source.composite_app);
+                INSERT INTO mi_api_artifacts (runtime_id, api_name, artifact_id, url, urls, context, version, state, tracing, [statistics], composite_app)
+                VALUES (${runtimeId}, ${api.name}, ${artifactId}, ${api.url}, ${urlsJson}, ${api.context},
+                        ${api.version}, ${api.state}, ${api.tracing}, ${api.statistics}, ${compositeApp});
             `);
         } else if dbType == POSTGRESQL {
             _ = check dbClient->execute(`
@@ -861,16 +853,6 @@ isolated function insertMIArtifacts(string runtimeId, types:Heartbeat heartbeat)
                     ${runtimeId}, ${api.name}, ${api.url}, ${urlsJson},
                     ${api.context}, ${api.version}, ${api.state}, ${api.tracing}, ${api.statistics}, ${compositeApp}
                 )
-                ON CONFLICT (runtime_id, api_name) DO UPDATE SET
-                    url = EXCLUDED.url,
-                    urls = EXCLUDED.urls,
-                    context = EXCLUDED.context,
-                    version = EXCLUDED.version,
-                    state = EXCLUDED.state,
-                    tracing = EXCLUDED.tracing,
-                    statistics = EXCLUDED.statistics,
-                    composite_app = EXCLUDED.composite_app,
-                    updated_at = CURRENT_TIMESTAMP
             `);
         } else {
             _ = check dbClient->execute(`
@@ -880,16 +862,6 @@ isolated function insertMIArtifacts(string runtimeId, types:Heartbeat heartbeat)
                     ${runtimeId}, ${api.name}, ${artifactId}, ${api.url}, ${urlsJson},
                     ${api.context}, ${api.version}, ${api.state}, ${api.tracing}, ${api.statistics}, ${compositeApp}
                 )
-                ON DUPLICATE KEY UPDATE
-                    url = VALUES(url),
-                    urls = VALUES(urls),
-                    context = VALUES(context),
-                    version = VALUES(version),
-                    state = VALUES(state),
-                    tracing = VALUES(tracing),
-                    statistics = VALUES(statistics),
-                    composite_app = VALUES(composite_app),
-                    updated_at = CURRENT_TIMESTAMP
             `);
         }
 
@@ -910,16 +882,8 @@ isolated function insertMIArtifacts(string runtimeId, types:Heartbeat heartbeat)
         foreach [string, string] [path, methods] in resourcesByPath.entries() {
             if dbType == MSSQL {
                 _ = check dbClient->execute(`
-                    MERGE INTO mi_api_resource_artifacts AS target
-                    USING (VALUES (${runtimeId}, ${api.name}, ${path}, ${methods}))
-                           AS source (runtime_id, api_name, resource_path, methods)
-                    ON (target.runtime_id = source.runtime_id AND target.api_name = source.api_name
-                        AND target.resource_path = source.resource_path)
-                    WHEN MATCHED THEN
-                        UPDATE SET methods = source.methods, updated_at = CURRENT_TIMESTAMP
-                    WHEN NOT MATCHED THEN
-                        INSERT (runtime_id, api_name, resource_path, methods)
-                        VALUES (source.runtime_id, source.api_name, source.resource_path, source.methods);
+                    INSERT INTO mi_api_resource_artifacts (runtime_id, api_name, resource_path, methods)
+                    VALUES (${runtimeId}, ${api.name}, ${path}, ${methods});
                 `);
             } else if dbType == POSTGRESQL {
                 _ = check dbClient->execute(`
@@ -929,9 +893,6 @@ isolated function insertMIArtifacts(string runtimeId, types:Heartbeat heartbeat)
                         ${runtimeId}, ${api.name},
                         ${path}, ${methods}
                     )
-                    ON CONFLICT (runtime_id, api_name, resource_path) DO UPDATE SET
-                        methods = EXCLUDED.methods,
-                        updated_at = CURRENT_TIMESTAMP
                 `);
             } else {
                 _ = check dbClient->execute(`
@@ -941,9 +902,6 @@ isolated function insertMIArtifacts(string runtimeId, types:Heartbeat heartbeat)
                         ${runtimeId}, ${api.name},
                         ${path}, ${methods}
                     )
-                    ON DUPLICATE KEY UPDATE
-                        methods = VALUES(methods),
-                        updated_at = CURRENT_TIMESTAMP
                 `);
             }
         }
@@ -954,15 +912,8 @@ isolated function insertMIArtifacts(string runtimeId, types:Heartbeat heartbeat)
         string? compositeApp = proxy?.compositeApp;
         if isMSSQL() {
             _ = check dbClient->execute(`
-                MERGE INTO mi_proxy_service_artifacts AS target
-                USING (VALUES (${runtimeId}, ${proxy.name}, ${artifactId}, ${proxy.state}, ${proxy.tracing}, ${proxy.statistics}, ${compositeApp}))
-                       AS source (runtime_id, proxy_name, artifact_id, state, tracing, [statistics], composite_app)
-                ON (target.runtime_id = source.runtime_id AND target.proxy_name = source.proxy_name)
-                WHEN MATCHED THEN
-                    UPDATE SET state = source.state, tracing = source.tracing, [statistics] = source.[statistics], composite_app = source.composite_app, updated_at = CURRENT_TIMESTAMP
-                WHEN NOT MATCHED THEN
-                    INSERT (runtime_id, proxy_name, artifact_id, state, tracing, [statistics], composite_app)
-                    VALUES (source.runtime_id, source.proxy_name, source.artifact_id, source.state, source.tracing, source.[statistics], source.composite_app);
+                INSERT INTO mi_proxy_service_artifacts (runtime_id, proxy_name, artifact_id, state, tracing, [statistics], composite_app)
+                VALUES (${runtimeId}, ${proxy.name}, ${artifactId}, ${proxy.state}, ${proxy.tracing}, ${proxy.statistics}, ${compositeApp});
             `);
         } else if dbType == POSTGRESQL {
             _ = check dbClient->execute(`
@@ -971,12 +922,6 @@ isolated function insertMIArtifacts(string runtimeId, types:Heartbeat heartbeat)
                 ) VALUES (
                     ${runtimeId}, ${proxy.name}, ${artifactId}, ${proxy.state}, ${proxy.tracing}, ${proxy.statistics}, ${compositeApp}
                 )
-                ON CONFLICT (runtime_id, proxy_name) DO UPDATE SET
-                    state = EXCLUDED.state,
-                    tracing = EXCLUDED.tracing,
-                    statistics = EXCLUDED.statistics,
-                    composite_app = EXCLUDED.composite_app,
-                    updated_at = CURRENT_TIMESTAMP
             `);
         } else {
             _ = check dbClient->execute(`
@@ -985,12 +930,6 @@ isolated function insertMIArtifacts(string runtimeId, types:Heartbeat heartbeat)
                 ) VALUES (
                     ${runtimeId}, ${proxy.name}, ${artifactId}, ${proxy.state}, ${proxy.tracing}, ${proxy.statistics}, ${compositeApp}
                 )
-                ON DUPLICATE KEY UPDATE
-                    state = VALUES(state),
-                    tracing = VALUES(tracing),
-                    statistics = VALUES(statistics),
-                    composite_app = VALUES(composite_app),
-                    updated_at = CURRENT_TIMESTAMP
             `);
         }
 
@@ -999,15 +938,8 @@ isolated function insertMIArtifacts(string runtimeId, types:Heartbeat heartbeat)
             foreach string ep in <string[]>proxy.endpoints {
                 if isMSSQL() {
                     _ = check dbClient->execute(`
-                        MERGE INTO mi_proxy_service_endpoint_artifacts AS target
-                        USING (VALUES (${runtimeId}, ${proxy.name}, ${ep}))
-                               AS source (runtime_id, proxy_name, endpoint_url)
-                        ON (target.runtime_id = source.runtime_id AND target.proxy_name = source.proxy_name AND target.endpoint_url = source.endpoint_url)
-                        WHEN MATCHED THEN
-                            UPDATE SET updated_at = CURRENT_TIMESTAMP
-                        WHEN NOT MATCHED THEN
-                            INSERT (runtime_id, proxy_name, endpoint_url)
-                            VALUES (source.runtime_id, source.proxy_name, source.endpoint_url);
+                        INSERT INTO mi_proxy_service_endpoint_artifacts (runtime_id, proxy_name, endpoint_url)
+                        VALUES (${runtimeId}, ${proxy.name}, ${ep});
                     `);
                 } else if dbType == POSTGRESQL {
                     _ = check dbClient->execute(`
@@ -1016,8 +948,6 @@ isolated function insertMIArtifacts(string runtimeId, types:Heartbeat heartbeat)
                         ) VALUES (
                             ${runtimeId}, ${proxy.name}, ${ep}
                         )
-                        ON CONFLICT (runtime_id, proxy_name, endpoint_url) DO UPDATE SET
-                            updated_at = CURRENT_TIMESTAMP
                     `);
                 } else {
                     _ = check dbClient->execute(`
@@ -1026,8 +956,6 @@ isolated function insertMIArtifacts(string runtimeId, types:Heartbeat heartbeat)
                         ) VALUES (
                             ${runtimeId}, ${proxy.name}, ${ep}
                         )
-                        ON DUPLICATE KEY UPDATE
-                            updated_at = CURRENT_TIMESTAMP
                     `);
                 }
             }
@@ -1039,15 +967,9 @@ isolated function insertMIArtifacts(string runtimeId, types:Heartbeat heartbeat)
         string? compositeApp = endpoint?.compositeApp;
         if isMSSQL() {
             _ = check dbClient->execute(`
-                MERGE INTO mi_endpoint_artifacts AS target
-                USING (VALUES (${runtimeId}, ${endpoint.name}, ${artifactId}, ${endpoint.'type}, ${endpoint.state}, ${endpoint.tracing}, ${endpoint.statistics}, ${compositeApp}))
-                       AS source (runtime_id, endpoint_name, artifact_id, endpoint_type, state, tracing, [statistics], composite_app)
-                ON (target.runtime_id = source.runtime_id AND target.endpoint_name = source.endpoint_name)
-                WHEN MATCHED THEN
-                    UPDATE SET endpoint_type = source.endpoint_type, state = source.state, tracing = source.tracing, [statistics] = source.[statistics], composite_app = source.composite_app, updated_at = CURRENT_TIMESTAMP
-                WHEN NOT MATCHED THEN
-                    INSERT (runtime_id, endpoint_name, artifact_id, endpoint_type, state, tracing, [statistics], composite_app)
-                    VALUES (source.runtime_id, source.endpoint_name, source.artifact_id, source.endpoint_type, source.state, source.tracing, source.[statistics], source.composite_app);
+                INSERT INTO mi_endpoint_artifacts (runtime_id, endpoint_name, artifact_id, endpoint_type, state, tracing, [statistics], composite_app)
+                VALUES (${runtimeId}, ${endpoint.name}, ${artifactId}, ${endpoint.'type},
+                        ${endpoint.state}, ${endpoint.tracing}, ${endpoint.statistics}, ${compositeApp});
             `);
         } else if dbType == POSTGRESQL {
             _ = check dbClient->execute(`
@@ -1057,13 +979,6 @@ isolated function insertMIArtifacts(string runtimeId, types:Heartbeat heartbeat)
                     ${runtimeId}, ${endpoint.name}, ${artifactId}, ${endpoint.'type},
                     ${endpoint.state}, ${endpoint.tracing}, ${endpoint.statistics}, ${compositeApp}
                 )
-                ON CONFLICT (runtime_id, endpoint_name) DO UPDATE SET
-                    endpoint_type = EXCLUDED.endpoint_type,
-                    state = EXCLUDED.state,
-                    tracing = EXCLUDED.tracing,
-                    statistics = EXCLUDED.statistics,
-                    composite_app = EXCLUDED.composite_app,
-                    updated_at = CURRENT_TIMESTAMP
             `);
         } else {
             _ = check dbClient->execute(`
@@ -1073,13 +988,6 @@ isolated function insertMIArtifacts(string runtimeId, types:Heartbeat heartbeat)
                     ${runtimeId}, ${endpoint.name}, ${artifactId}, ${endpoint.'type},
                     ${endpoint.state}, ${endpoint.tracing}, ${endpoint.statistics}, ${compositeApp}
                 )
-                ON DUPLICATE KEY UPDATE
-                    endpoint_type = VALUES(endpoint_type),
-                    state = VALUES(state),
-                    tracing = VALUES(tracing),
-                    statistics = VALUES(statistics),
-                    composite_app = VALUES(composite_app),
-                    updated_at = CURRENT_TIMESTAMP
             `);
         }
 
@@ -1089,15 +997,8 @@ isolated function insertMIArtifacts(string runtimeId, types:Heartbeat heartbeat)
             foreach types:EndpointAttribute attr in attrsVal {
                 if isMSSQL() {
                     _ = check dbClient->execute(`
-                        MERGE INTO mi_endpoint_attribute_artifacts AS target
-                        USING (VALUES (${runtimeId}, ${endpoint.name}, ${attr.name}, ${attr?.value}))
-                               AS source (runtime_id, endpoint_name, attribute_name, attribute_value)
-                        ON (target.runtime_id = source.runtime_id AND target.endpoint_name = source.endpoint_name AND target.attribute_name = source.attribute_name)
-                        WHEN MATCHED THEN
-                            UPDATE SET attribute_value = source.attribute_value, updated_at = CURRENT_TIMESTAMP
-                        WHEN NOT MATCHED THEN
-                            INSERT (runtime_id, endpoint_name, attribute_name, attribute_value)
-                            VALUES (source.runtime_id, source.endpoint_name, source.attribute_name, source.attribute_value);
+                        INSERT INTO mi_endpoint_attribute_artifacts (runtime_id, endpoint_name, attribute_name, attribute_value)
+                        VALUES (${runtimeId}, ${endpoint.name}, ${attr.name}, ${attr?.value});
                     `);
                 } else if dbType == POSTGRESQL {
                     _ = check dbClient->execute(`
@@ -1106,9 +1007,6 @@ isolated function insertMIArtifacts(string runtimeId, types:Heartbeat heartbeat)
                         ) VALUES (
                             ${runtimeId}, ${endpoint.name}, ${attr.name}, ${attr?.value}
                         )
-                        ON CONFLICT (runtime_id, endpoint_name, attribute_name) DO UPDATE SET
-                            attribute_value = EXCLUDED.attribute_value,
-                            updated_at = CURRENT_TIMESTAMP
                     `);
                 } else {
                     _ = check dbClient->execute(`
@@ -1117,9 +1015,6 @@ isolated function insertMIArtifacts(string runtimeId, types:Heartbeat heartbeat)
                         ) VALUES (
                             ${runtimeId}, ${endpoint.name}, ${attr.name}, ${attr?.value}
                         )
-                        ON DUPLICATE KEY UPDATE
-                            attribute_value = VALUES(attribute_value),
-                            updated_at = CURRENT_TIMESTAMP
                     `);
                 }
             }
@@ -1134,15 +1029,9 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
         string? compositeApp = inbound?.compositeApp;
         if isMSSQL() {
             _ = check dbClient->execute(`
-                MERGE INTO mi_inbound_endpoint_artifacts AS target
-                USING (VALUES (${runtimeId}, ${inbound.name}, ${artifactId}, ${inbound.protocol}, ${inbound.sequence}, ${inbound.state}, ${inbound.statistics}, ${inbound.onError}, ${inbound.tracing}, ${compositeApp}))
-                       AS source (runtime_id, inbound_name, artifact_id, protocol, sequence, state, [statistics], on_error, tracing, composite_app)
-                ON (target.runtime_id = source.runtime_id AND target.inbound_name = source.inbound_name)
-                WHEN MATCHED THEN
-                    UPDATE SET protocol = source.protocol, sequence = source.sequence, state = source.state, [statistics] = source.[statistics], on_error = source.on_error, tracing = source.tracing, composite_app = source.composite_app, updated_at = CURRENT_TIMESTAMP
-                WHEN NOT MATCHED THEN
-                    INSERT (runtime_id, inbound_name, artifact_id, protocol, sequence, state, [statistics], on_error, tracing, composite_app)
-                    VALUES (source.runtime_id, source.inbound_name, source.artifact_id, source.protocol, source.sequence, source.state, source.[statistics], source.on_error, source.tracing, source.composite_app);
+                INSERT INTO mi_inbound_endpoint_artifacts (runtime_id, inbound_name, artifact_id, protocol, sequence, state, [statistics], on_error, tracing, composite_app)
+                VALUES (${runtimeId}, ${inbound.name}, ${artifactId}, ${inbound.protocol}, ${inbound.sequence},
+                        ${inbound.state}, ${inbound.statistics}, ${inbound.onError}, ${inbound.tracing}, ${compositeApp});
             `);
         } else if dbType == POSTGRESQL {
             _ = check dbClient->execute(`
@@ -1152,15 +1041,6 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                     ${runtimeId}, ${inbound.name}, ${inbound.protocol},
                     ${inbound.sequence}, ${inbound.state}, ${inbound.statistics}, ${inbound.onError}, ${inbound.tracing}, ${compositeApp}
                 )
-                ON CONFLICT (runtime_id, inbound_name) DO UPDATE SET
-                    protocol = EXCLUDED.protocol,
-                    sequence = EXCLUDED.sequence,
-                    state = EXCLUDED.state,
-                    statistics = EXCLUDED.statistics,
-                    on_error = EXCLUDED.on_error,
-                    tracing = EXCLUDED.tracing,
-                    composite_app = EXCLUDED.composite_app,
-                    updated_at = CURRENT_TIMESTAMP
             `);
         } else {
             _ = check dbClient->execute(`
@@ -1170,15 +1050,6 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                     ${runtimeId}, ${inbound.name}, ${artifactId}, ${inbound.protocol},
                     ${inbound.sequence}, ${inbound.state}, ${inbound.statistics}, ${inbound.onError}, ${inbound.tracing}, ${compositeApp}
                 )
-                ON DUPLICATE KEY UPDATE
-                    protocol = VALUES(protocol),
-                    sequence = VALUES(sequence),
-                    state = VALUES(state),
-                    statistics = VALUES(statistics),
-                    on_error = VALUES(on_error),
-                    tracing = VALUES(tracing),
-                    composite_app = VALUES(composite_app),
-                    updated_at = CURRENT_TIMESTAMP
             `);
         }
     }
@@ -1188,15 +1059,9 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
         string? compositeApp = sequence?.compositeApp;
         if isMSSQL() {
             _ = check dbClient->execute(`
-                MERGE INTO mi_sequence_artifacts AS target
-                USING (VALUES (${runtimeId}, ${sequence.name}, ${artifactId}, ${sequence.'type}, ${sequence.container}, ${sequence.state}, ${sequence.tracing}, ${sequence.statistics}, ${compositeApp}))
-                       AS source (runtime_id, sequence_name, artifact_id, sequence_type, container, state, tracing, [statistics], composite_app)
-                ON (target.runtime_id = source.runtime_id AND target.sequence_name = source.sequence_name)
-                WHEN MATCHED THEN
-                    UPDATE SET sequence_type = source.sequence_type, container = source.container, state = source.state, tracing = source.tracing, [statistics] = source.[statistics], composite_app = source.composite_app, updated_at = CURRENT_TIMESTAMP
-                WHEN NOT MATCHED THEN
-                    INSERT (runtime_id, sequence_name, artifact_id, sequence_type, container, state, tracing, [statistics], composite_app)
-                    VALUES (source.runtime_id, source.sequence_name, source.artifact_id, source.sequence_type, source.container, source.state, source.tracing, source.[statistics], source.composite_app);
+                INSERT INTO mi_sequence_artifacts (runtime_id, sequence_name, artifact_id, sequence_type, container, state, tracing, [statistics], composite_app)
+                VALUES (${runtimeId}, ${sequence.name}, ${artifactId}, ${sequence.'type},
+                        ${sequence.container}, ${sequence.state}, ${sequence.tracing}, ${sequence.statistics}, ${compositeApp});
             `);
         } else if dbType == POSTGRESQL {
             _ = check dbClient->execute(`
@@ -1206,14 +1071,6 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                     ${runtimeId}, ${sequence.name}, ${sequence.'type},
                     ${sequence.container}, ${sequence.state}, ${sequence.tracing}, ${sequence.statistics}, ${compositeApp}
                 )
-                ON CONFLICT (runtime_id, sequence_name) DO UPDATE SET
-                    sequence_type = EXCLUDED.sequence_type,
-                    container = EXCLUDED.container,
-                    state = EXCLUDED.state,
-                    tracing = EXCLUDED.tracing,
-                    statistics = EXCLUDED.statistics,
-                    composite_app = EXCLUDED.composite_app,
-                    updated_at = CURRENT_TIMESTAMP
             `);
         } else {
             _ = check dbClient->execute(`
@@ -1223,14 +1080,6 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                     ${runtimeId}, ${sequence.name}, ${artifactId}, ${sequence.'type},
                     ${sequence.container}, ${sequence.state}, ${sequence.tracing}, ${sequence.statistics}, ${compositeApp}
                 )
-                ON DUPLICATE KEY UPDATE
-                    sequence_type = VALUES(sequence_type),
-                    container = VALUES(container),
-                    state = VALUES(state),
-                    tracing = VALUES(tracing),
-                    statistics = VALUES(statistics),
-                    composite_app = VALUES(composite_app),
-                    updated_at = CURRENT_TIMESTAMP
             `);
         }
     }
@@ -1240,15 +1089,8 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
         string? compositeApp = task?.compositeApp;
         if isMSSQL() {
             _ = check dbClient->execute(`
-                MERGE INTO mi_task_artifacts AS target
-                USING (VALUES (${runtimeId}, ${task.name}, ${artifactId}, ${task.'class}, ${task.group}, ${task.state}, ${compositeApp}))
-                       AS source (runtime_id, task_name, artifact_id, task_class, task_group, state, composite_app)
-                ON (target.runtime_id = source.runtime_id AND target.task_name = source.task_name)
-                WHEN MATCHED THEN
-                    UPDATE SET task_class = source.task_class, task_group = source.task_group, state = source.state, composite_app = source.composite_app, updated_at = CURRENT_TIMESTAMP
-                WHEN NOT MATCHED THEN
-                    INSERT (runtime_id, task_name, artifact_id, task_class, task_group, state, composite_app)
-                    VALUES (source.runtime_id, source.task_name, source.artifact_id, source.task_class, source.task_group, source.state, source.composite_app);
+                INSERT INTO mi_task_artifacts (runtime_id, task_name, artifact_id, task_class, task_group, state, composite_app)
+                VALUES (${runtimeId}, ${task.name}, ${artifactId}, ${task.'class}, ${task.group}, ${task.state}, ${compositeApp});
             `);
         } else if dbType == POSTGRESQL {
             _ = check dbClient->execute(`
@@ -1258,12 +1100,6 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                     ${runtimeId}, ${task.name}, ${task.'class},
                     ${task.group}, ${task.state}, ${compositeApp}
                 )
-                ON CONFLICT (runtime_id, task_name) DO UPDATE SET
-                    task_class = EXCLUDED.task_class,
-                    task_group = EXCLUDED.task_group,
-                    state = EXCLUDED.state,
-                    composite_app = EXCLUDED.composite_app,
-                    updated_at = CURRENT_TIMESTAMP
             `);
         } else {
             _ = check dbClient->execute(`
@@ -1273,12 +1109,6 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                     ${runtimeId}, ${task.name}, ${artifactId}, ${task.'class},
                     ${task.group}, ${task.state}, ${compositeApp}
                 )
-                ON DUPLICATE KEY UPDATE
-                    task_class = VALUES(task_class),
-                    task_group = VALUES(task_group),
-                    state = VALUES(state),
-                    composite_app = VALUES(composite_app),
-                    updated_at = CURRENT_TIMESTAMP
             `);
         }
     }
@@ -1287,15 +1117,8 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
         string? compositeApp = template?.compositeApp;
         if isMSSQL() {
             _ = check dbClient->execute(`
-                MERGE INTO mi_template_artifacts AS target
-                USING (VALUES (${runtimeId}, ${template.name}, ${template.'type}, ${template.tracing}, ${template.statistics}, ${compositeApp}))
-                       AS source (runtime_id, template_name, template_type, tracing, statistics, composite_app)
-                ON (target.runtime_id = source.runtime_id AND target.template_name = source.template_name)
-                WHEN MATCHED THEN
-                    UPDATE SET template_type = source.template_type, tracing = source.tracing, statistics = source.statistics, composite_app = source.composite_app, updated_at = CURRENT_TIMESTAMP
-                WHEN NOT MATCHED THEN
-                    INSERT (runtime_id, template_name, template_type, tracing, statistics, composite_app)
-                    VALUES (source.runtime_id, source.template_name, source.template_type, source.tracing, source.statistics, source.composite_app);
+                INSERT INTO mi_template_artifacts (runtime_id, template_name, template_type, tracing, statistics, composite_app)
+                VALUES (${runtimeId}, ${template.name}, ${template.'type}, ${template.tracing}, ${template.statistics}, ${compositeApp});
             `);
         } else if dbType == POSTGRESQL {
             _ = check dbClient->execute(`
@@ -1304,12 +1127,6 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                 ) VALUES (
                     ${runtimeId}, ${template.name}, ${template.'type}, ${template.tracing}, ${template.statistics}, ${compositeApp}
                 )
-                ON CONFLICT (runtime_id, template_name) DO UPDATE SET
-                    template_type = EXCLUDED.template_type,
-                    tracing = EXCLUDED.tracing,
-                    statistics = EXCLUDED.statistics,
-                    composite_app = EXCLUDED.composite_app,
-                    updated_at = CURRENT_TIMESTAMP
             `);
         } else {
             _ = check dbClient->execute(`
@@ -1318,12 +1135,6 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                 ) VALUES (
                     ${runtimeId}, ${template.name}, ${template.'type}, ${template.tracing}, ${template.statistics}, ${compositeApp}
                 )
-                ON DUPLICATE KEY UPDATE
-                    template_type = VALUES(template_type),
-                    tracing = VALUES(tracing),
-                    statistics = VALUES(statistics),
-                    composite_app = VALUES(composite_app),
-                    updated_at = CURRENT_TIMESTAMP
             `);
         }
     }
@@ -1332,15 +1143,8 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
         string? compositeApp = store?.compositeApp;
         if isMSSQL() {
             _ = check dbClient->execute(`
-                MERGE INTO mi_message_store_artifacts AS target
-                USING (VALUES (${runtimeId}, ${store.name}, ${store.'type}, ${store.size}, ${compositeApp}))
-                       AS source (runtime_id, store_name, store_type, size, composite_app)
-                ON (target.runtime_id = source.runtime_id AND target.store_name = source.store_name)
-                WHEN MATCHED THEN
-                    UPDATE SET store_type = source.store_type, size = source.size, composite_app = source.composite_app, updated_at = CURRENT_TIMESTAMP
-                WHEN NOT MATCHED THEN
-                    INSERT (runtime_id, store_name, store_type, size, composite_app)
-                    VALUES (source.runtime_id, source.store_name, source.store_type, source.size, source.composite_app);
+                INSERT INTO mi_message_store_artifacts (runtime_id, store_name, store_type, size, composite_app)
+                VALUES (${runtimeId}, ${store.name}, ${store.'type}, ${store.size}, ${compositeApp});
             `);
         } else if dbType == POSTGRESQL {
             _ = check dbClient->execute(`
@@ -1349,11 +1153,6 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                 ) VALUES (
                     ${runtimeId}, ${store.name}, ${store.'type}, ${store.size}, ${compositeApp}
                 )
-                ON CONFLICT (runtime_id, store_name) DO UPDATE SET
-                    store_type = EXCLUDED.store_type,
-                    size = EXCLUDED.size,
-                    composite_app = EXCLUDED.composite_app,
-                    updated_at = CURRENT_TIMESTAMP
             `);
         } else {
             _ = check dbClient->execute(`
@@ -1362,11 +1161,6 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                 ) VALUES (
                     ${runtimeId}, ${store.name}, ${store.'type}, ${store.size}, ${compositeApp}
                 )
-                ON DUPLICATE KEY UPDATE
-                    store_type = VALUES(store_type),
-                    size = VALUES(size),
-                    composite_app = VALUES(composite_app),
-                    updated_at = CURRENT_TIMESTAMP
             `);
         }
     }
@@ -1376,15 +1170,8 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
         string? compositeApp = processor?.compositeApp;
         if isMSSQL() {
             _ = check dbClient->execute(`
-                MERGE INTO mi_message_processor_artifacts AS target
-                USING (VALUES (${runtimeId}, ${processor.name}, ${artifactId}, ${processor.'type}, ${processor.'class}, ${processor.state}, ${compositeApp}))
-                       AS source (runtime_id, processor_name, artifact_id, processor_type, processor_class, state, composite_app)
-                ON (target.runtime_id = source.runtime_id AND target.processor_name = source.processor_name)
-                WHEN MATCHED THEN
-                    UPDATE SET processor_type = source.processor_type, processor_class = source.processor_class, state = source.state, composite_app = source.composite_app, updated_at = CURRENT_TIMESTAMP
-                WHEN NOT MATCHED THEN
-                    INSERT (runtime_id, processor_name, artifact_id, processor_type, processor_class, state, composite_app)
-                    VALUES (source.runtime_id, source.processor_name, source.artifact_id, source.processor_type, source.processor_class, source.state, source.composite_app);
+                INSERT INTO mi_message_processor_artifacts (runtime_id, processor_name, artifact_id, processor_type, processor_class, state, composite_app)
+                VALUES (${runtimeId}, ${processor.name}, ${artifactId}, ${processor.'type}, ${processor.'class}, ${processor.state}, ${compositeApp});
             `);
         } else if dbType == POSTGRESQL {
             _ = check dbClient->execute(`
@@ -1394,12 +1181,6 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                     ${runtimeId}, ${processor.name}, ${processor.'type},
                     ${processor.'class}, ${processor.state}, ${compositeApp}
                 )
-                ON CONFLICT (runtime_id, processor_name) DO UPDATE SET
-                    processor_type = EXCLUDED.processor_type,
-                    processor_class = EXCLUDED.processor_class,
-                    state = EXCLUDED.state,
-                    composite_app = EXCLUDED.composite_app,
-                    updated_at = CURRENT_TIMESTAMP
             `);
         } else {
             _ = check dbClient->execute(`
@@ -1409,12 +1190,6 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                     ${runtimeId}, ${processor.name}, ${artifactId}, ${processor.'type},
                     ${processor.'class}, ${processor.state}, ${compositeApp}
                 )
-                ON DUPLICATE KEY UPDATE
-                    processor_type = VALUES(processor_type),
-                    processor_class = VALUES(processor_class),
-                    state = VALUES(state),
-                    composite_app = VALUES(composite_app),
-                    updated_at = CURRENT_TIMESTAMP
             `);
         }
     }
@@ -1424,15 +1199,8 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
         string? compositeApp = entry?.compositeApp;
         if isMSSQL() {
             _ = check dbClient->execute(`
-                MERGE INTO mi_local_entry_artifacts AS target
-                USING (VALUES (${runtimeId}, ${entry.name}, ${artifactId}, ${entry.'type}, ${entry.value}, ${entry.state}, ${compositeApp}))
-                       AS source (runtime_id, entry_name, artifact_id, entry_type, entry_value, state, composite_app)
-                ON (target.runtime_id = source.runtime_id AND target.entry_name = source.entry_name)
-                WHEN MATCHED THEN
-                    UPDATE SET entry_type = source.entry_type, entry_value = source.entry_value, state = source.state, composite_app = source.composite_app, updated_at = CURRENT_TIMESTAMP
-                WHEN NOT MATCHED THEN
-                    INSERT (runtime_id, entry_name, artifact_id, entry_type, entry_value, state, composite_app)
-                    VALUES (source.runtime_id, source.entry_name, source.artifact_id, source.entry_type, source.entry_value, source.state, source.composite_app);
+                INSERT INTO mi_local_entry_artifacts (runtime_id, entry_name, artifact_id, entry_type, entry_value, state, composite_app)
+                VALUES (${runtimeId}, ${entry.name}, ${artifactId}, ${entry.'type}, ${entry.value}, ${entry.state}, ${compositeApp});
             `);
         } else if dbType == POSTGRESQL {
             _ = check dbClient->execute(`
@@ -1442,12 +1210,6 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                     ${runtimeId}, ${entry.name}, ${entry.'type},
                     ${entry.value}, ${entry.state}, ${compositeApp}
                 )
-                ON CONFLICT (runtime_id, entry_name) DO UPDATE SET
-                    entry_type = EXCLUDED.entry_type,
-                    entry_value = EXCLUDED.entry_value,
-                    state = EXCLUDED.state,
-                    composite_app = EXCLUDED.composite_app,
-                    updated_at = CURRENT_TIMESTAMP
             `);
         } else {
             _ = check dbClient->execute(`
@@ -1457,12 +1219,6 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                     ${runtimeId}, ${entry.name}, ${artifactId}, ${entry.'type},
                     ${entry.value}, ${entry.state}, ${compositeApp}
                 )
-                ON DUPLICATE KEY UPDATE
-                    entry_type = VALUES(entry_type),
-                    entry_value = VALUES(entry_value),
-                    state = VALUES(state),
-                    composite_app = VALUES(composite_app),
-                    updated_at = CURRENT_TIMESTAMP
             `);
         }
     }
@@ -1472,15 +1228,9 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
         string? compositeApp = dataService?.compositeApp;
         if isMSSQL() {
             _ = check dbClient->execute(`
-                MERGE INTO mi_data_service_artifacts AS target
-                USING (VALUES (${runtimeId}, ${dataService.name}, ${artifactId}, ${dataService.description}, ${dataService.wsdl}, ${dataService.state}, ${compositeApp}))
-                       AS source (runtime_id, service_name, artifact_id, description, wsdl, state, composite_app)
-                ON (target.runtime_id = source.runtime_id AND target.service_name = source.service_name)
-                WHEN MATCHED THEN
-                    UPDATE SET description = source.description, wsdl = source.wsdl, state = source.state, composite_app = source.composite_app, updated_at = CURRENT_TIMESTAMP
-                WHEN NOT MATCHED THEN
-                    INSERT (runtime_id, service_name, artifact_id, description, wsdl, state, composite_app)
-                    VALUES (source.runtime_id, source.service_name, source.artifact_id, source.description, source.wsdl, source.state, source.composite_app);
+                INSERT INTO mi_data_service_artifacts (runtime_id, service_name, artifact_id, description, wsdl, state, composite_app)
+                VALUES (${runtimeId}, ${dataService.name}, ${artifactId}, ${dataService.description},
+                        ${dataService.wsdl}, ${dataService.state}, ${compositeApp});
             `);
         } else if dbType == POSTGRESQL {
             _ = check dbClient->execute(`
@@ -1490,12 +1240,6 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                     ${runtimeId}, ${dataService.name}, ${dataService.description},
                     ${dataService.wsdl}, ${dataService.state}, ${compositeApp}
                 )
-                ON CONFLICT (runtime_id, service_name) DO UPDATE SET
-                    description = EXCLUDED.description,
-                    wsdl = EXCLUDED.wsdl,
-                    state = EXCLUDED.state,
-                    composite_app = EXCLUDED.composite_app,
-                    updated_at = CURRENT_TIMESTAMP
             `);
         } else {
             _ = check dbClient->execute(`
@@ -1505,12 +1249,6 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                     ${runtimeId}, ${dataService.name}, ${artifactId}, ${dataService.description},
                     ${dataService.wsdl}, ${dataService.state}, ${compositeApp}
                 )
-                ON DUPLICATE KEY UPDATE
-                    description = VALUES(description),
-                    wsdl = VALUES(wsdl),
-                    state = VALUES(state),
-                    composite_app = VALUES(composite_app),
-                    updated_at = CURRENT_TIMESTAMP
             `);
         }
     }
@@ -1524,15 +1262,8 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
         string? errorMessage = app?.errorMessage;
         if isMSSQL() {
             _ = check dbClient->execute(`
-                MERGE INTO mi_composite_app_artifacts AS target
-                USING (VALUES (${runtimeId}, ${app.name}, ${app.version}, ${appState}, ${errorMessage}, ${artifactsJson}))
-                       AS source (runtime_id, app_name, version, state, error_message, artifacts)
-                ON (target.runtime_id = source.runtime_id AND target.app_name = source.app_name)
-                WHEN MATCHED THEN
-                    UPDATE SET version = source.version, state = source.state, error_message = source.error_message, artifacts = source.artifacts, updated_at = CURRENT_TIMESTAMP
-                WHEN NOT MATCHED THEN
-                    INSERT (runtime_id, app_name, version, state, error_message, artifacts)
-                    VALUES (source.runtime_id, source.app_name, source.version, source.state, source.error_message, source.artifacts);
+                INSERT INTO mi_composite_app_artifacts (runtime_id, app_name, version, state, error_message, artifacts)
+                VALUES (${runtimeId}, ${app.name}, ${app.version}, ${appState}, ${errorMessage}, ${artifactsJson});
             `);
         } else if dbType == POSTGRESQL {
             _ = check dbClient->execute(`
@@ -1541,12 +1272,6 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                 ) VALUES (
                     ${runtimeId}, ${app.name}, ${app.version}, ${appState}, ${errorMessage}, ${artifactsJson}
                 )
-                ON CONFLICT (runtime_id, app_name) DO UPDATE SET
-                    version = EXCLUDED.version,
-                    state = EXCLUDED.state,
-                    error_message = EXCLUDED.error_message,
-                    artifacts = EXCLUDED.artifacts,
-                    updated_at = CURRENT_TIMESTAMP
             `);
         } else {
             _ = check dbClient->execute(`
@@ -1555,27 +1280,15 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                 ) VALUES (
                     ${runtimeId}, ${app.name}, ${app.version}, ${appState}, ${errorMessage}, ${artifactsJson}
                 )
-                ON DUPLICATE KEY UPDATE
-                    version = VALUES(version),
-                    state = VALUES(state),
-                    error_message = VALUES(error_message),
-                    artifacts = VALUES(artifacts),
-                    updated_at = CURRENT_TIMESTAMP
             `);
         }
     }
     foreach types:DataSource dataSource in <types:DataSource[]>heartbeat.artifacts.dataSources {
         if isMSSQL() {
             _ = check dbClient->execute(`
-                MERGE INTO mi_data_source_artifacts AS target
-                USING (VALUES (${runtimeId}, ${dataSource.name}, ${dataSource.'type}, ${dataSource.driver}, ${dataSource.url}, ${dataSource.username}, ${dataSource.state}))
-                       AS source (runtime_id, datasource_name, datasource_type, driver, url, username, state)
-                ON (target.runtime_id = source.runtime_id AND target.datasource_name = source.datasource_name)
-                WHEN MATCHED THEN
-                    UPDATE SET datasource_type = source.datasource_type, driver = source.driver, url = source.url, username = source.username, state = source.state, updated_at = CURRENT_TIMESTAMP
-                WHEN NOT MATCHED THEN
-                    INSERT (runtime_id, datasource_name, datasource_type, driver, url, username, state)
-                    VALUES (source.runtime_id, source.datasource_name, source.datasource_type, source.driver, source.url, source.username, source.state);
+                INSERT INTO mi_data_source_artifacts (runtime_id, datasource_name, datasource_type, driver, url, username, state)
+                VALUES (${runtimeId}, ${dataSource.name}, ${dataSource.'type}, ${dataSource.driver},
+                        ${dataSource.url}, ${dataSource.username}, ${dataSource.state});
             `);
         } else if dbType == POSTGRESQL {
             _ = check dbClient->execute(`
@@ -1585,13 +1298,6 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                     ${runtimeId}, ${dataSource.name}, ${dataSource.'type}, ${dataSource.driver},
                     ${dataSource.url}, ${dataSource.username}, ${dataSource.state}
                 )
-                ON CONFLICT (runtime_id, datasource_name) DO UPDATE SET
-                    datasource_type = EXCLUDED.datasource_type,
-                    driver = EXCLUDED.driver,
-                    url = EXCLUDED.url,
-                    username = EXCLUDED.username,
-                    state = EXCLUDED.state,
-                    updated_at = CURRENT_TIMESTAMP
             `);
         } else {
             _ = check dbClient->execute(`
@@ -1601,13 +1307,6 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                     ${runtimeId}, ${dataSource.name}, ${dataSource.'type}, ${dataSource.driver},
                     ${dataSource.url}, ${dataSource.username}, ${dataSource.state}
                 )
-                ON DUPLICATE KEY UPDATE
-                    datasource_type = VALUES(datasource_type),
-                    driver = VALUES(driver),
-                    url = VALUES(url),
-                    username = VALUES(username),
-                    state = VALUES(state),
-                    updated_at = CURRENT_TIMESTAMP
             `);
         }
     }
@@ -1616,15 +1315,9 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
         string artifactId = uuid:createType4AsString();
         if isMSSQL() {
             _ = check dbClient->execute(`
-                MERGE INTO mi_connector_artifacts AS target
-                USING (VALUES (${runtimeId}, ${connector.name}, ${artifactId}, ${connector.package}, ${connector.version}, ${connector.description}, ${connector.state}))
-                       AS source (runtime_id, connector_name, artifact_id, package, version, description, state)
-                ON (target.runtime_id = source.runtime_id AND target.connector_name = source.connector_name AND target.package = source.package)
-                WHEN MATCHED THEN
-                    UPDATE SET version = source.version, description = source.description, state = source.state, updated_at = CURRENT_TIMESTAMP
-                WHEN NOT MATCHED THEN
-                    INSERT (runtime_id, connector_name, artifact_id, package, version, description, state)
-                    VALUES (source.runtime_id, source.connector_name, source.artifact_id, source.package, source.version, source.description, source.state);
+                INSERT INTO mi_connector_artifacts (runtime_id, connector_name, artifact_id, package, version, description, state)
+                VALUES (${runtimeId}, ${connector.name}, ${artifactId}, ${connector.package},
+                        ${connector.version}, ${connector.description}, ${connector.state});
             `);
         } else if dbType == POSTGRESQL {
             _ = check dbClient->execute(`
@@ -1634,11 +1327,6 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                     ${runtimeId}, ${connector.name}, ${connector.package},
                     ${connector.version}, ${connector.description}, ${connector.state}
                 )
-                ON CONFLICT (runtime_id, connector_name, package) DO UPDATE SET
-                    version = EXCLUDED.version,
-                    description = EXCLUDED.description,
-                    state = EXCLUDED.state,
-                    updated_at = CURRENT_TIMESTAMP
             `);
         } else {
             _ = check dbClient->execute(`
@@ -1648,11 +1336,6 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                     ${runtimeId}, ${connector.name}, ${artifactId}, ${connector.package},
                     ${connector.version}, ${connector.description}, ${connector.state}
                 )
-                ON DUPLICATE KEY UPDATE
-                    version = VALUES(version),
-                    description = VALUES(description),
-                    state = VALUES(state),
-                    updated_at = CURRENT_TIMESTAMP
             `);
             log:printDebug(string `Successfully processed connector artifact: ${connector.name} version: ${connector.version.toString()}`);
         }
@@ -1661,15 +1344,8 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
     foreach types:RegistryResource registryResource in <types:RegistryResource[]>heartbeat.artifacts.registryResources {
         if isMSSQL() {
             _ = check dbClient->execute(`
-                MERGE INTO mi_registry_resource_artifacts AS target
-                USING (VALUES (${runtimeId}, ${registryResource.name}, ${registryResource.'type}))
-                       AS source (runtime_id, resource_name, resource_type)
-                ON (target.runtime_id = source.runtime_id AND target.resource_name = source.resource_name)
-                WHEN MATCHED THEN
-                    UPDATE SET updated_at = CURRENT_TIMESTAMP
-                WHEN NOT MATCHED THEN
-                    INSERT (runtime_id, resource_name, resource_type)
-                    VALUES (source.runtime_id, source.resource_name, source.resource_type);
+                INSERT INTO mi_registry_resource_artifacts (runtime_id, resource_name, resource_type)
+                VALUES (${runtimeId}, ${registryResource.name}, ${registryResource.'type});
             `);
         } else if dbType == POSTGRESQL {
             _ = check dbClient->execute(`
@@ -1678,8 +1354,6 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                 ) VALUES (
                     ${runtimeId}, ${registryResource.name}, ${registryResource.'type}
                 )
-                ON CONFLICT (runtime_id, resource_name) DO UPDATE SET
-                    updated_at = CURRENT_TIMESTAMP
             `);
         } else {
             _ = check dbClient->execute(`
@@ -1688,8 +1362,6 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
                 ) VALUES (
                     ${runtimeId}, ${registryResource.name}, ${registryResource.'type}
                 )
-                ON DUPLICATE KEY UPDATE
-                    updated_at = CURRENT_TIMESTAMP
             `);
         }
     }
