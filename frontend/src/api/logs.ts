@@ -33,6 +33,7 @@ export interface LogRow {
   logContext: unknown;
   componentVersion: string;
   componentVersionId: string;
+  error: unknown | null;
 }
 
 interface Column {
@@ -57,6 +58,7 @@ const COLUMN_MAP: Record<string, keyof LogRow> = {
   LogContext: 'logContext',
   ComponentVersion: 'componentVersion',
   ComponentVersionId: 'componentVersionId',
+  Error: 'error',
 };
 
 export async function fetchLogs(req: LogsRequest): Promise<LogRow[]> {
