@@ -199,6 +199,15 @@ service /icp/observability on httpListener {
             };
         }
 
+        // Guard: an empty runtimeIdList with no filters would produce an unscoped OpenSearch query
+        // returning data across all runtimes. Return empty instead.
+        if runtimeIdList.length() == 0 {
+            return {
+                columns: [],
+                rows: []
+            };
+        }
+
         // Check if observability client is available before any runtime-type lookups
         http:Client? httpClient = observabilityHttpClient;
         if httpClient is () {
@@ -269,6 +278,7 @@ service /icp/observability on httpListener {
                                                          });
 
         types:UserContextV2 userContext = check extractUserFromObservabilityRequest(request);
+        log:printInfo("Processing metrics request", userId = userContext.userId);
         runtimeIdList = check filterRuntimeIdsForUser(userContext.userId, runtimeIdList);
 
         // If component/environment filters were provided but no runtimes found, return empty result
@@ -279,6 +289,15 @@ service /icp/observability on httpListener {
 
         if (hasFilters && runtimeIdList.length() == 0) {
             log:printDebug("No runtimes found for the given component/environment filters. Returning empty result.");
+            return {
+                inboundMetrics: [],
+                outboundMetrics: []
+            };
+        }
+
+        // Guard: an empty runtimeIdList with no filters would produce an unscoped OpenSearch query
+        // returning data across all runtimes. Return empty instead.
+        if runtimeIdList.length() == 0 {
             return {
                 inboundMetrics: [],
                 outboundMetrics: []
