@@ -1085,11 +1085,10 @@ public isolated function getEnvironmentRestriction(string userId, string? projec
 public isolated function hasAccessToRuntime(string userId, string runtimeId) returns boolean|error {
     log:printDebug(string `Checking runtime access for user ${userId} on runtime ${runtimeId}`);
 
-    // First, get the integration_uuid and env_uuid for this runtime
-    record {|string integration_uuid; string? env_uuid;|}? runtime = check dbClient->queryRow(
-        `SELECT integration_uuid, env_uuid 
-         FROM runtimes 
-         WHERE runtime_uuid = ${runtimeId}`
+    record {|string component_id; string environment_id;|}? runtime = check dbClient->queryRow(
+        `SELECT component_id, environment_id
+         FROM runtimes
+         WHERE runtime_id = ${runtimeId}`
     );
 
     if runtime is () {
@@ -1098,18 +1097,13 @@ public isolated function hasAccessToRuntime(string userId, string runtimeId) ret
     }
 
     // Check integration access
-    boolean hasIntegrationAccess = check hasAccessToIntegration(userId, runtime.integration_uuid);
+    boolean hasIntegrationAccess = check hasAccessToIntegration(userId, runtime.component_id);
     if !hasIntegrationAccess {
         return false;
     }
 
-    // If runtime has no specific environment, user needs org/project-level access
-    if runtime.env_uuid is () {
-        return true;
-    }
-
     // Check environment restriction
-    string[]? allowedEnvs = check getEnvironmentRestriction(userId, integrationId = runtime.integration_uuid);
+    string[]? allowedEnvs = check getEnvironmentRestriction(userId, integrationId = runtime.component_id);
 
     // If allowedEnvs is (), user has access to all environments
     if allowedEnvs is () {
@@ -1118,7 +1112,7 @@ public isolated function hasAccessToRuntime(string userId, string runtimeId) ret
 
     // Check if runtime's environment is in the allowed list
     foreach string envId in allowedEnvs {
-        if envId == runtime.env_uuid {
+        if envId == runtime.environment_id {
             return true;
         }
     }
