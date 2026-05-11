@@ -92,7 +92,7 @@ function AssignRoleToGroupsDialog({
     const envUuid = envMode === 'selected' && selectedEnvs.length > 0 ? selectedEnvs[0] : undefined;
 
     const promises = selected.map((g) =>
-      mutation.mutateAsync({ groupId: g.groupId, roleIds: [roleId], envUuid, projectId, componentId }).then(
+      mutation.mutateAsync({ groupId: g.groupId, roleIds: [roleId], envUuid, projectId, integrationId: componentId }).then(
         () => ({ success: true, groupName: g.groupName }),
         (error) => ({ success: false, groupName: g.groupName, error }),
       ),

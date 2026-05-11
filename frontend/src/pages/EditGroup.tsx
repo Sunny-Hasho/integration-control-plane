@@ -89,7 +89,7 @@ function AddRolesToGroupDialog({
     setAssignError(null);
     const envUuid = envMode === 'selected' && selectedEnvs.length > 0 ? selectedEnvs[0] : undefined;
     mutation.mutate(
-      { groupId, roleIds: selected.map((r) => r.roleId), envUuid, projectId, componentId },
+      { groupId, roleIds: selected.map((r) => r.roleId), envUuid, projectId, integrationId: componentId },
       {
         onSuccess: () => {
           onAdded?.();
