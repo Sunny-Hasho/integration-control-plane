@@ -227,15 +227,15 @@ export function useGroupUsers(orgHandler: string, groupId: string, options?: { e
   });
 }
 
-export function useAddRolesToGroup(orgHandler: string, projectId?: string, componentId?: string) {
+export function useAddRolesToGroup(orgHandler: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { groupId: string; roleIds: string[]; envUuid?: string }) => {
+    mutationFn: (input: { groupId: string; roleIds: string[]; envUuid?: string; projectId?: string; integrationId?: string }) => {
       const body = {
         roleIds: input.roleIds,
         envUuid: input.envUuid,
-        ...(projectId ? { projectUuid: projectId } : {}),
-        ...(componentId ? { integrationUuid: componentId } : {}),
+        ...(input.projectId ? { projectUuid: input.projectId } : {}),
+        ...(input.integrationId ? { integrationUuid: input.integrationId } : {}),
       };
       return authPost(`/orgs/${orgHandler}/groups/${input.groupId}/roles`, body);
     },

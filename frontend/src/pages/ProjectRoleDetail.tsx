@@ -74,7 +74,7 @@ function AssignRoleToGroupsDialog({
 }) {
   const { data: allGroups = [] } = useGroups(orgHandler, projectId);
   const { data: allEnvironments = [] } = useAllEnvironments();
-  const mutation = useAddRolesToGroup(orgHandler, projectId);
+  const mutation = useAddRolesToGroup(orgHandler);
   const [selected, setSelected] = useState<Group[]>([]);
   const [envMode, setEnvMode] = useState<'all' | 'selected'>('all');
   const [selectedEnvs, setSelectedEnvs] = useState<string[]>([]);
@@ -88,7 +88,7 @@ function AssignRoleToGroupsDialog({
     const envUuid = envMode === 'selected' && selectedEnvs.length > 0 ? selectedEnvs[0] : undefined;
     const results = await Promise.all(
       selected.map((g) =>
-        mutation.mutateAsync({ groupId: g.groupId, roleIds: [roleId], envUuid }).then(
+        mutation.mutateAsync({ groupId: g.groupId, roleIds: [roleId], envUuid, projectId }).then(
           () => ({ success: true, groupName: g.groupName }),
           (error) => ({ success: false, groupName: g.groupName, error }),
         ),

@@ -57,8 +57,24 @@ import { orgAccessControlUrl } from '../paths';
 import { FormDialog } from './access-control/shared';
 import { useFiltered, mappingLevel, envLabel, getUserInitial } from './access-control/utils';
 
-function AddRolesToGroupDialog({ orgHandler, groupId, existingRoleIds, onClose, onAdded }: { orgHandler: string; groupId: string; existingRoleIds: string[]; onClose: () => void; onAdded?: () => void }) {
-  const { data: allRoles = [] } = useRoles(orgHandler);
+function AddRolesToGroupDialog({
+  orgHandler,
+  groupId,
+  existingRoleIds,
+  onClose,
+  onAdded,
+  projectId,
+  componentId,
+}: {
+  orgHandler: string;
+  groupId: string;
+  existingRoleIds: string[];
+  onClose: () => void;
+  onAdded?: () => void;
+  projectId?: string;
+  componentId?: string;
+}) {
+  const { data: allRoles = [] } = useRoles(orgHandler, projectId, componentId);
   const { data: allEnvironments = [] } = useAllEnvironments();
   const mutation = useAddRolesToGroup(orgHandler);
   const [selected, setSelected] = useState<Role[]>([]);
@@ -73,7 +89,7 @@ function AddRolesToGroupDialog({ orgHandler, groupId, existingRoleIds, onClose, 
     setAssignError(null);
     const envUuid = envMode === 'selected' && selectedEnvs.length > 0 ? selectedEnvs[0] : undefined;
     mutation.mutate(
-      { groupId, roleIds: selected.map((r) => r.roleId), envUuid },
+      { groupId, roleIds: selected.map((r) => r.roleId), envUuid, projectId, integrationId: componentId },
       {
         onSuccess: () => {
           onAdded?.();
@@ -476,6 +492,8 @@ export function GroupDetailView({ orgHandler, group, onBack, projectId, componen
               existingRoleIds={groupRoles.map((r) => r.roleId)}
               onClose={() => setAddingRoles(false)}
               onAdded={() => setViewAlert({ type: 'success', message: 'Role(s) added to group successfully.' })}
+              projectId={projectId}
+              componentId={componentId}
             />
           )}
           {removingRole && (
