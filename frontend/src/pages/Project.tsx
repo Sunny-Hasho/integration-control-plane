@@ -128,7 +128,7 @@ function IntegrationsTable({
                       {c.description || ''}
                     </Typography>
                   </ListingTable.Cell>
-                  <ListingTable.Cell>{c.componentType}</ListingTable.Cell>
+                  <ListingTable.Cell>{c.componentType === 'BI' ? 'Default' : c.componentType}</ListingTable.Cell>
                   <ListingTable.Cell>
                     <Typography variant="body2" color="text.secondary">
                       {formatDistanceToNow(c.lastBuildDate)}

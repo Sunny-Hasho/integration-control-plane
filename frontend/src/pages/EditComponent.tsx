@@ -114,7 +114,7 @@ export default function EditComponent(scope: ProjectScope | ComponentScope): JSX
           <TextField label="Name" value={component.handler} fullWidth disabled slotProps={{ htmlInput: { 'aria-label': 'Name' } }} helperText="Name cannot be changed" />
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
-          <TextField label="Integration Type" value={component.componentType} fullWidth disabled slotProps={{ htmlInput: { 'aria-label': 'Integration Type' } }} helperText="Type cannot be changed" />
+          <TextField label="Integration Type" value={component.componentType === 'BI' ? 'Default' : component.componentType} fullWidth disabled slotProps={{ htmlInput: { 'aria-label': 'Integration Type' } }} helperText="Type cannot be changed" />
         </Grid>
       </Grid>
 

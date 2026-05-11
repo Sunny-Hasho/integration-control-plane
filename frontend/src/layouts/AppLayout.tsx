@@ -476,7 +476,7 @@ export default function AppLayout(): JSX.Element {
                   label="Integrations">
                   {components.map((c) => (
                     <ComplexSelect.MenuItem key={c.id} value={c.handler}>
-                      <ComplexSelect.MenuItem.Text primary={c.displayName} secondary={c.componentType} />
+                      <ComplexSelect.MenuItem.Text primary={c.displayName} secondary={c.componentType === 'BI' ? 'Default' : c.componentType} />
                     </ComplexSelect.MenuItem>
                   ))}
                 </ComplexSelect>

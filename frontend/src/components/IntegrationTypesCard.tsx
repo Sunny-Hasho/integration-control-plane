@@ -37,7 +37,7 @@ export default function IntegrationTypesCard({ components }: { components: GqlCo
         <Stack>
           {Object.entries(counts).map(([type, count]) => (
             <Stack key={type} direction="row" justifyContent="space-between" sx={{ py: 0.5 }}>
-              <Typography variant="body2">{type}</Typography>
+              <Typography variant="body2">{type === 'BI' ? 'Default' : type}</Typography>
               <Typography variant="body2">{count}</Typography>
             </Stack>
           ))}
