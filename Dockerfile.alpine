@@ -16,6 +16,9 @@
 
 # Stage 1: source for the glibc GCC runtime library needed by netty-tcnative
 FROM ubuntu:22.04 AS libgcc-provider
+# uname -m returns the GNU arch prefix (aarch64, x86_64, …) used in Ubuntu's
+# multiarch paths — copy to a fixed location so Stage 2 needs no arch logic.
+RUN cp /usr/lib/$(uname -m)-linux-gnu/libgcc_s.so.1 /libgcc_s.so.1
 
 # Stage 2: Alpine + glibc + glibc JRE
 # frolvlad/alpine-glibc provides Alpine with real glibc at /usr/glibc-compat/lib.
@@ -30,7 +33,7 @@ RUN apk add --no-cache bash unzip curl
 
 # netty-tcnative requires libgcc_s.so.1 (GCC C++ exception unwinding).
 # The glibc compat layer does not include it, so copy it from Ubuntu.
-COPY --from=libgcc-provider /usr/lib/aarch64-linux-gnu/libgcc_s.so.1 \
+COPY --from=libgcc-provider /libgcc_s.so.1 \
      /usr/glibc-compat/lib/libgcc_s.so.1
 
 # Download glibc-compiled Eclipse Temurin 21 JRE (Linux aarch64, not alpine/musl).
