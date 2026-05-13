@@ -1,0 +1,76 @@
+# Copyright (c) 2026, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
+#
+# WSO2 Inc. licenses this file to you under the Apache License,
+# Version 2.0 (the "License"); you may not use this file except
+# in compliance with the License.
+# You may obtain a copy of the License at
+#
+#  http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+# Stage 1: source for the glibc GCC runtime library needed by netty-tcnative
+FROM ubuntu:22.04 AS libgcc-provider
+# uname -m returns the GNU arch prefix (aarch64, x86_64, …) used in Ubuntu's
+# multiarch paths — copy to a fixed location so Stage 2 needs no arch logic.
+RUN cp /usr/lib/$(uname -m)-linux-gnu/libgcc_s.so.1 /libgcc_s.so.1
+
+# Stage 2: Alpine + glibc + glibc JRE
+# frolvlad/alpine-glibc provides Alpine with real glibc at /usr/glibc-compat/lib.
+# A glibc-compiled Temurin JRE is downloaded so the JVM's own dlopen uses glibc
+# and can load the glibc-compiled netty-tcnative native SSL library in icp-server.jar.
+FROM frolvlad/alpine-glibc:latest
+
+ARG ICP_VERSION=2.0.0-SNAPSHOT
+
+# bash + unzip: required by icp.sh at runtime; curl: JRE download
+RUN apk add --no-cache bash unzip curl
+
+# netty-tcnative requires libgcc_s.so.1 (GCC C++ exception unwinding).
+# The glibc compat layer does not include it, so copy it from Ubuntu.
+COPY --from=libgcc-provider /libgcc_s.so.1 \
+     /usr/glibc-compat/lib/libgcc_s.so.1
+
+# Download glibc-compiled Eclipse Temurin 21 JRE (Linux aarch64, not alpine/musl).
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ]; then \
+        JRE_FILE="OpenJDK21U-jre_aarch64_linux_hotspot_21.0.11_10.tar.gz"; \
+        JRE_SHA256="fa23d9d9945053e67bcc7638410eabf1e17a7672c7c95a24f70cd08b8407d36e"; \
+    else \
+        JRE_FILE="OpenJDK21U-jre_x64_linux_hotspot_21.0.11_10.tar.gz"; \
+        JRE_SHA256="e5038aae3ca9ff670bc696496b0728dbd23d280026bad30291cb919221ecfdcb"; \
+    fi && \
+    curl -fL "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.11%2B10/${JRE_FILE}" \
+        -o /tmp/jre.tar.gz && \
+    echo "${JRE_SHA256}  /tmp/jre.tar.gz" | sha256sum -c - && \
+    mkdir -p /opt/java && \
+    tar -xzf /tmp/jre.tar.gz -C /opt/java --strip-components=1 && \
+    rm /tmp/jre.tar.gz
+
+ENV JAVA_HOME=/opt/java
+# Put glibc-compat bin first so icp.sh's `ldd --version` sees "GNU libc", not "musl".
+# Also remove /etc/alpine-release so the file-existence check is false too.
+# With both conditions false, icp.sh's detect_java_opts skips the noOpenSsl block
+# entirely — no change to icp.sh required.
+RUN rm /etc/alpine-release
+ENV PATH="/usr/glibc-compat/bin:${JAVA_HOME}/bin:${PATH}"
+
+WORKDIR /home/wso2
+
+COPY build/distribution/wso2-integration-control-plane-${ICP_VERSION}.zip ./
+
+RUN unzip wso2-integration-control-plane-${ICP_VERSION}.zip && \
+    rm wso2-integration-control-plane-${ICP_VERSION}.zip && \
+    chmod +x wso2-integration-control-plane-${ICP_VERSION}/bin/icp.sh
+
+WORKDIR /home/wso2/wso2-integration-control-plane-${ICP_VERSION}
+
+# HTTPS, GraphQL, Observability
+EXPOSE 9445 9446 9449
+
+ENTRYPOINT ["bin/icp.sh"]

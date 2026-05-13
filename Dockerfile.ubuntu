@@ -1,0 +1,41 @@
+# Copyright (c) 2026, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
+#
+# WSO2 Inc. licenses this file to you under the Apache License,
+# Version 2.0 (the "License"); you may not use this file except
+# in compliance with the License.
+# You may obtain a copy of the License at
+#
+#  http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+FROM eclipse-temurin:21-jre
+
+ARG ICP_VERSION=2.0.0
+ARG ICP_DOWNLOAD_URL=https://github.com/wso2/integration-control-plane/releases/download/v${ICP_VERSION}/wso2-integration-control-plane-${ICP_VERSION}.zip
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl unzip && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /home/wso2
+
+RUN curl -fL "${ICP_DOWNLOAD_URL}" -o wso2-integration-control-plane-${ICP_VERSION}.zip && \
+    curl -fL "${ICP_DOWNLOAD_URL}.sha256" -o wso2-integration-control-plane-${ICP_VERSION}.zip.sha256 && \
+    sha256sum -c wso2-integration-control-plane-${ICP_VERSION}.zip.sha256 && \
+    rm wso2-integration-control-plane-${ICP_VERSION}.zip.sha256 && \
+    unzip wso2-integration-control-plane-${ICP_VERSION}.zip && \
+    rm wso2-integration-control-plane-${ICP_VERSION}.zip && \
+    chmod +x wso2-integration-control-plane-${ICP_VERSION}/bin/icp.sh
+
+WORKDIR /home/wso2/wso2-integration-control-plane-${ICP_VERSION}
+
+# HTTPS, GraphQL, Observability
+EXPOSE 9445 9446 9449
+
+ENTRYPOINT ["bin/icp.sh"]
