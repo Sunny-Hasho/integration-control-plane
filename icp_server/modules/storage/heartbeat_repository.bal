@@ -1117,7 +1117,7 @@ isolated function insertAdditionalMIArtifacts(string runtimeId, types:Heartbeat 
         string? compositeApp = template?.compositeApp;
         if isMSSQL() {
             _ = check dbClient->execute(`
-                INSERT INTO mi_template_artifacts (runtime_id, template_name, template_type, tracing, statistics, composite_app)
+                INSERT INTO mi_template_artifacts (runtime_id, template_name, template_type, tracing, [statistics], composite_app)
                 VALUES (${runtimeId}, ${template.name}, ${template.'type}, ${template.tracing}, ${template.statistics}, ${compositeApp});
             `);
         } else if dbType == POSTGRESQL {
