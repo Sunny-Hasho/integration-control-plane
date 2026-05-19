@@ -102,7 +102,7 @@ export default function LoginForm(): JSX.Element {
   };
 
   return (
-    <form onSubmit={handleLogin}>
+    <form onSubmit={handleLogin} method="post">
       <Typography variant="h4" component="h2" sx={{ mb: 4, textAlign: 'center' }}>
         Sign In
       </Typography>

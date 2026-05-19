@@ -30,7 +30,7 @@ final readonly & jwt:IssuerSignatureConfig jwtSignatureConfig;
 
 @http:ServiceConfig {
     cors: {
-        allowOrigins: ["*"]
+        allowOrigins: corsAllowedOrigins
     }
 }
 service /auth on httpListener {

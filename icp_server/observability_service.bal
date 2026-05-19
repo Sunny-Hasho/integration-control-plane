@@ -160,7 +160,7 @@ isolated function filterRuntimeIdsForUser(string userId, string[] runtimeIds) re
         }
     ],
     cors: {
-        allowOrigins: ["*"],
+        allowOrigins: corsAllowedOrigins,
         allowHeaders: ["Content-Type", "Authorization"]
     }
 }

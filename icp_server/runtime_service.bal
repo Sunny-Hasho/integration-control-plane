@@ -30,7 +30,8 @@ listener http:Listener httpListener = new (serverPort,
             key: {
                 path: keystorePath,
                 password: resolvedKeystorePassword
-            }
+            },
+            ciphers: tlsCiphers
         }
     }
 );
@@ -43,7 +44,8 @@ listener http:Listener runtimeListener = new (runtimeListenerPort,
             key: {
                 path: keystorePath,
                 password: resolvedKeystorePassword
-            }
+            },
+            ciphers: tlsCiphers
         }
     }
 );

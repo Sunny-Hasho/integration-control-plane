@@ -36,71 +36,87 @@ service / on httpListener {
 
     // Serve static files from build directory
     resource function get [string... path](http:Request req) returns http:Response|error {
-        http:Response response = new;
-
-        // Build file path
-        string filePath = path.length() == 0 ? "index.html" : string:'join("/", ...path);
-
-        // Security: Reject paths containing ".." to prevent path traversal attacks
-        if filePath.includes("..") {
-            response.statusCode = 400;
-            response.setTextPayload("Invalid path");
-            log:printWarn("Path traversal attempt detected: " + filePath);
-            return response;
-        }
-
-        // If path is a directory, serve index.html
-        if filePath.endsWith("/") {
-            filePath = filePath + "index.html";
-        }
-
-        // Security: Normalize paths and ensure they stay within the base directory
-        string baseDir = check file:getAbsolutePath("../www");
-        string fullPath = check file:getAbsolutePath("../www/" + filePath);
-
-        // Ensure resolved path is within base directory
-        if !fullPath.startsWith(baseDir) {
-            response.statusCode = 403;
-            response.setTextPayload("Access denied");
-            log:printWarn("Directory traversal attempt blocked: " + fullPath);
-            return response;
-        }
-
-        // Check if file exists
-        boolean fileExists = check file:test(fullPath, file:EXISTS);
-
-        if !fileExists {
-            // For SPA routing: if file doesn't exist and path doesn't have an extension,
-            // serve index.html to let client-side router handle it
-            if filePath.indexOf(".") is () {
-                string indexPath = "../www/index.html";
-                boolean indexExists = check file:test(indexPath, file:EXISTS);
-
-                if indexExists {
-                    byte[] fileContent = check io:fileReadBytes(indexPath);
-                    response.setHeader("Content-Type", "text/html; charset=utf-8");
-                    response.setBinaryPayload(fileContent);
-                    return response;
-                }
-            }
-
-            response.statusCode = 404;
-            response.setTextPayload("File not found: " + filePath);
-            log:printError("File not found: " + fullPath);
-            return response;
-        }
-
-        // Read file content
-        byte[] fileContent = check io:fileReadBytes(fullPath);
-
-        // Set content type based on file extension
-        string contentType = getContentType(filePath);
-        response.setHeader("Content-Type", contentType);
-        response.setBinaryPayload(fileContent);
-
+        http:Response response = check serveStaticFile(path);
+        response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
         return response;
     }
 
+}
+
+function serveStaticFile(string[] path) returns http:Response|error {
+    http:Response response = new;
+
+    // Build file path
+    string filePath = path.length() == 0 ? "index.html" : string:'join("/", ...path);
+
+    // Security: Reject paths containing ".." to prevent path traversal attacks
+    if filePath.includes("..") {
+        response.statusCode = 400;
+        response.setTextPayload("Invalid path");
+        log:printWarn("Path traversal attempt detected: " + filePath);
+        return response;
+    }
+
+    // If path is a directory, serve index.html
+    if filePath.endsWith("/") {
+        filePath = filePath + "index.html";
+    }
+
+    // Security: Normalize paths and ensure they stay within the base directory
+    string baseDir = check file:getAbsolutePath("../www");
+    string fullPath = check file:getAbsolutePath("../www/" + filePath);
+
+    // Ensure resolved path is within base directory
+    if !fullPath.startsWith(baseDir) {
+        response.statusCode = 403;
+        response.setTextPayload("Access denied");
+        log:printWarn("Directory traversal attempt blocked: " + fullPath);
+        return response;
+    }
+
+    // Check if file exists
+    boolean fileExists = check file:test(fullPath, file:EXISTS);
+
+    // Reject directory paths — io:fileReadBytes would return a 500 "Is a directory" error
+    if fileExists {
+        boolean isDirectory = check file:test(fullPath, file:IS_DIR);
+        if isDirectory {
+            response.statusCode = 404;
+            response.setTextPayload("Not found");
+            return response;
+        }
+    }
+
+    if !fileExists {
+        // For SPA routing: if file doesn't exist and path doesn't have an extension,
+        // serve index.html to let client-side router handle it
+        if filePath.indexOf(".") is () {
+            string indexPath = "../www/index.html";
+            boolean indexExists = check file:test(indexPath, file:EXISTS);
+
+            if indexExists {
+                byte[] fileContent = check io:fileReadBytes(indexPath);
+                response.setHeader("Content-Type", "text/html; charset=utf-8");
+                response.setBinaryPayload(fileContent);
+                return response;
+            }
+        }
+
+        response.statusCode = 404;
+        response.setTextPayload("File not found: " + filePath);
+        log:printError("File not found: " + fullPath);
+        return response;
+    }
+
+    // Read file content
+    byte[] fileContent = check io:fileReadBytes(fullPath);
+
+    // Set content type based on file extension
+    string contentType = getContentType(filePath);
+    response.setHeader("Content-Type", contentType);
+    response.setBinaryPayload(fileContent);
+
+    return response;
 }
 
 // Helper function to determine content type
