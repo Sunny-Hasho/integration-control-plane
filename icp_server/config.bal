@@ -56,6 +56,22 @@ configurable decimal userServiceJwtClockSkewSeconds = 0;
 
 configurable int defaultTokenExpiryTime = 3600; // 1 hour (in seconds)
 
+// CORS configuration — restrict to known origins; default matches the local dev server
+configurable string[] corsAllowedOrigins = ["https://localhost:9446"];
+
+// TLS cipher suites — GCM and ChaCha20 only; CBC ciphers excluded (BEAST/POODLE/Lucky13)
+configurable string[] tlsCiphers = [
+    "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+    "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+    "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+    "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+    "TLS_DHE_RSA_WITH_AES_256_GCM_SHA384",
+    "TLS_DHE_RSA_WITH_AES_128_GCM_SHA256",
+    "TLS_AES_256_GCM_SHA384",
+    "TLS_CHACHA20_POLY1305_SHA256",
+    "TLS_AES_128_GCM_SHA256"
+];
+
 //Backend URLs for the frontend to call
 configurable string backendGraphqlEndpoint = "https://localhost:9446/graphql";
 configurable string backendAuthBaseUrl = "https://localhost:9446/auth";
