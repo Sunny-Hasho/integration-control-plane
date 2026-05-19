@@ -38,6 +38,7 @@ service / on httpListener {
     resource function get [string... path](http:Request req) returns http:Response|error {
         http:Response response = check serveStaticFile(path);
         response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+        response.setHeader("X-Content-Type-Options", "nosniff");
         return response;
     }
 
@@ -104,7 +105,7 @@ function serveStaticFile(string[] path) returns http:Response|error {
 
         response.statusCode = 404;
         response.setTextPayload("File not found: " + filePath);
-        log:printError("File not found: " + fullPath);
+        log:printWarn("File not found: " + fullPath);
         return response;
     }
 
