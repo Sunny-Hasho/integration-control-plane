@@ -35,8 +35,17 @@ service / on httpListener {
     }
 
     // Serve static files from build directory
-    resource function get [string... path](http:Request req) returns http:Response|error {
-        http:Response response = check serveStaticFile(path);
+    resource function get [string... path](http:Request req) returns http:Response {
+        http:Response|error result = serveStaticFile(path);
+        http:Response response;
+        if result is error {
+            log:printError("Error serving static file", result);
+            response = new;
+            response.statusCode = 500;
+            response.setTextPayload("Internal server error");
+        } else {
+            response = result;
+        }
         response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
         response.setHeader("X-Content-Type-Options", "nosniff");
         return response;
