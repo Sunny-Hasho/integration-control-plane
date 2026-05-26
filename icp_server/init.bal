@@ -80,6 +80,9 @@ function init() returns error? {
     );
     credentialsDbClient = credentialsDbManager.getClient();
 
+    // Initialize audit logging
+    storage:initAuditLogging(enableAuditLogging, auditLogFilePath);
+
     // Initialize the runtime scheduler
     check initRuntimeScheduler();
 

@@ -102,6 +102,7 @@ configurable boolean ssoAllowInsecureTLS = false; // Set true for local/self-sig
 // Logging configuration
 configurable string logLevel = "INFO"; // DEBUG, INFO, WARN, ERROR
 configurable boolean enableAuditLogging = true;
+configurable string auditLogFilePath = "../logs/audit.log";
 configurable boolean enableMetrics = true;
 
 // Observability Adapter configuration

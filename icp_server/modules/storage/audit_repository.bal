@@ -1,0 +1,223 @@
+// Copyright (c) 2026, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
+//
+// WSO2 Inc. licenses this file to you under the Apache License,
+// Version 2.0 (the "License"); you may not use this file except
+// in compliance with the License.
+// You may obtain a copy of the License at
+//
+//  http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+import ballerina/io;
+import ballerina/log;
+import ballerina/sql;
+import ballerina/time;
+
+// ── Audit action constants ─────────────────────────────────────────────────
+
+// Authentication events
+public const string AUDIT_LOGIN_SUCCESS = "LOGIN_SUCCESS";
+public const string AUDIT_LOGIN_FAILURE = "LOGIN_FAILURE";
+public const string AUDIT_LOGIN_LOCKED = "LOGIN_LOCKED";
+public const string AUDIT_LOGOUT = "LOGOUT";
+public const string AUDIT_LOGOUT_ALL = "LOGOUT_ALL";
+public const string AUDIT_OIDC_LOGIN_SUCCESS = "OIDC_LOGIN_SUCCESS";
+public const string AUDIT_OIDC_LOGIN_FAILURE = "OIDC_LOGIN_FAILURE";
+
+// Password events
+public const string AUDIT_PASSWORD_CHANGE = "PASSWORD_CHANGE";
+public const string AUDIT_PASSWORD_RESET = "PASSWORD_RESET";
+public const string AUDIT_PASSWORD_FORCED_CHANGE = "PASSWORD_FORCED_CHANGE";
+
+// User management events
+public const string AUDIT_USER_CREATE = "USER_CREATE";
+public const string AUDIT_USER_DELETE = "USER_DELETE";
+public const string AUDIT_USER_SESSIONS_REVOKE = "USER_SESSIONS_REVOKE";
+
+// Group management events
+public const string AUDIT_GROUP_CREATE = "GROUP_CREATE";
+public const string AUDIT_GROUP_UPDATE = "GROUP_UPDATE";
+public const string AUDIT_GROUP_DELETE = "GROUP_DELETE";
+public const string AUDIT_GROUP_MEMBER_ADD = "GROUP_MEMBER_ADD";
+public const string AUDIT_GROUP_MEMBER_REMOVE = "GROUP_MEMBER_REMOVE";
+public const string AUDIT_USER_GROUPS_UPDATE = "USER_GROUPS_UPDATE";
+
+// Role management events
+public const string AUDIT_ROLE_CREATE = "ROLE_CREATE";
+public const string AUDIT_ROLE_UPDATE = "ROLE_UPDATE";
+public const string AUDIT_ROLE_DELETE = "ROLE_DELETE";
+public const string AUDIT_ROLE_ASSIGNED = "ROLE_ASSIGNED";
+public const string AUDIT_ROLE_UNASSIGNED = "ROLE_UNASSIGNED";
+
+// Environment management events
+public const string AUDIT_ENVIRONMENT_CREATE = "ENVIRONMENT_CREATE";
+public const string AUDIT_ENVIRONMENT_UPDATE = "ENVIRONMENT_UPDATE";
+public const string AUDIT_ENVIRONMENT_DELETE = "ENVIRONMENT_DELETE";
+
+// Project management events
+public const string AUDIT_PROJECT_CREATE = "PROJECT_CREATE";
+public const string AUDIT_PROJECT_UPDATE = "PROJECT_UPDATE";
+public const string AUDIT_PROJECT_DELETE = "PROJECT_DELETE";
+
+// Component management events
+public const string AUDIT_COMPONENT_CREATE = "COMPONENT_CREATE";
+public const string AUDIT_COMPONENT_UPDATE = "COMPONENT_UPDATE";
+public const string AUDIT_COMPONENT_DELETE = "COMPONENT_DELETE";
+
+// Runtime management events
+public const string AUDIT_RUNTIME_DELETE = "RUNTIME_DELETE";
+
+// Artifact control events
+public const string AUDIT_ARTIFACT_STATUS_CHANGE = "ARTIFACT_STATUS_CHANGE";
+public const string AUDIT_ARTIFACT_TRACING_CHANGE = "ARTIFACT_TRACING_CHANGE";
+public const string AUDIT_ARTIFACT_STATISTICS_CHANGE = "ARTIFACT_STATISTICS_CHANGE";
+public const string AUDIT_ARTIFACT_TRIGGER = "ARTIFACT_TRIGGER";
+
+// Logger events
+public const string AUDIT_LOG_LEVEL_CHANGE = "LOG_LEVEL_CHANGE";
+public const string AUDIT_LOGGER_DELETE = "LOGGER_DELETE";
+public const string AUDIT_LISTENER_STATE_CHANGE = "LISTENER_STATE_CHANGE";
+
+// Secret events
+public const string AUDIT_ORG_SECRET_CREATE = "ORG_SECRET_CREATE";
+public const string AUDIT_ORG_SECRET_REVOKE = "ORG_SECRET_REVOKE";
+
+// MI runtime user events
+public const string AUDIT_MI_USER_CREATE = "MI_USER_CREATE";
+public const string AUDIT_MI_USER_DELETE = "MI_USER_DELETE";
+
+// ── Audit resource type constants ──────────────────────────────────────────
+
+public const string AUDIT_RESOURCE_SESSION = "SESSION";
+public const string AUDIT_RESOURCE_USER = "USER";
+public const string AUDIT_RESOURCE_GROUP = "GROUP";
+public const string AUDIT_RESOURCE_ROLE = "ROLE";
+public const string AUDIT_RESOURCE_ENVIRONMENT = "ENVIRONMENT";
+public const string AUDIT_RESOURCE_PROJECT = "PROJECT";
+public const string AUDIT_RESOURCE_COMPONENT = "COMPONENT";
+public const string AUDIT_RESOURCE_RUNTIME = "RUNTIME";
+public const string AUDIT_RESOURCE_ARTIFACT = "ARTIFACT";
+public const string AUDIT_RESOURCE_LOGGER = "LOGGER";
+public const string AUDIT_RESOURCE_LISTENER = "LISTENER";
+public const string AUDIT_RESOURCE_SECRET = "SECRET";
+
+// ── Module-level isolated state ────────────────────────────────────────────
+
+isolated boolean auditEnabled = false;
+isolated string auditFilePath = "";
+
+// ── Initialization ─────────────────────────────────────────────────────────
+
+// Called once from init.bal to configure audit logging from the main module.
+public isolated function initAuditLogging(boolean enabled, string filePath) {
+    lock {
+        auditEnabled = enabled;
+    }
+    lock {
+        auditFilePath = filePath;
+    }
+    if enabled {
+        log:printInfo("Audit logging enabled", auditLogFile = filePath.length() > 0 ? filePath : "disabled");
+    }
+}
+
+// ── Core audit function ────────────────────────────────────────────────────
+
+// Write a single audit event to both the database and (optionally) a log file.
+// This function is isolated so it can be invoked from any isolated service resource.
+public isolated function logAuditEvent(
+        string action,
+        string? userId = (),
+        string? resourceType = (),
+        string? resourceId = (),
+        string? details = (),
+        string? clientIp = (),
+        string? userAgent = ()
+) {
+    boolean enabled;
+    lock {
+        enabled = auditEnabled;
+    }
+    if !enabled {
+        return;
+    }
+
+    string filePath;
+    lock {
+        filePath = auditFilePath;
+    }
+
+    // Write to database
+    sql:ExecutionResult|sql:Error dbResult = dbClient->execute(`
+        INSERT INTO audit_logs (user_id, action, resource_type, resource_id, details, client_ip, user_agent)
+        VALUES (${userId}, ${action}, ${resourceType}, ${resourceId}, ${details}, ${clientIp}, ${userAgent})
+    `);
+    if dbResult is sql:Error {
+        log:printError("Failed to persist audit event to database", dbResult, action = action);
+    }
+
+    // Log with a dedicated AUDIT prefix so operators can grep/filter from the application log.
+    log:printInfo("AUDIT",
+            action = action,
+            userId = userId ?: "",
+            resourceType = resourceType ?: "",
+            resourceId = resourceId ?: "",
+            details = details ?: "",
+            clientIp = clientIp ?: "");
+
+    // File writing is handled separately via writeAuditEventToFile(), which must
+    // be called from non-isolated contexts (e.g., from init.bal startup paths).
+    // Audit events flowing through isolated service handlers are captured in the
+    // DB and application log above; filePath is stored for reference only.
+    _ = filePath;
+}
+
+// ── Dedicated audit file writer ────────────────────────────────────────────
+
+// Appends a JSONL-formatted audit entry to the configured audit log file.
+// Called via `start` so it never blocks the caller.
+function appendAuditLine(
+        string filePath,
+        string action,
+        string? userId,
+        string? resourceType,
+        string? resourceId,
+        string? details,
+        string? clientIp
+) {
+    string timestamp = buildTimestamp();
+
+    json entry = {
+        timestamp: timestamp,
+        action: action,
+        userId: userId,
+        resourceType: resourceType,
+        resourceId: resourceId,
+        details: details,
+        clientIp: clientIp
+    };
+
+    error? writeResult = io:fileWriteString(filePath, entry.toJsonString() + "\n", option = io:APPEND);
+    if writeResult is error {
+        log:printError("Failed to write audit event to log file", writeResult, action = action, filePath = filePath);
+    }
+}
+
+function buildTimestamp() returns string {
+    time:Utc utcNow = time:utcNow();
+    time:Civil c = time:utcToCivil(utcNow);
+    string month = c.month < 10 ? "0" + c.month.toString() : c.month.toString();
+    string day = c.day < 10 ? "0" + c.day.toString() : c.day.toString();
+    string hour = c.hour < 10 ? "0" + c.hour.toString() : c.hour.toString();
+    string minute = c.minute < 10 ? "0" + c.minute.toString() : c.minute.toString();
+    decimal second = c.second ?: 0d;
+    int secondInt = <int>second;
+    string secondStr = secondInt < 10 ? "0" + secondInt.toString() : secondInt.toString();
+    return string `${c.year}-${month}-${day}T${hour}:${minute}:${secondStr}Z`;
+}

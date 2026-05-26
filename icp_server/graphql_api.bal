@@ -1803,6 +1803,9 @@ service /graphql on graphqlListener {
         check storage:deleteRuntime(runtimeId);
         check sync:reconcileDeleteRuntime(runtimeId);
         log:printInfo(string `deleteRuntime: deleted runtimeId=${runtimeId}`, userId = userContext.userId);
+        storage:logAuditEvent(storage:AUDIT_RUNTIME_DELETE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_RUNTIME, resourceId = runtimeId,
+                details = string `Runtime '${runtimeId}' deleted by '${userContext.username}'`);
 
         boolean secretRevoked = false;
         if revokeSecret == true && orphanedKeyId is string {
@@ -1856,6 +1859,9 @@ service /graphql on graphqlListener {
             }
         }
 
+        storage:logAuditEvent(storage:AUDIT_LISTENER_STATE_CHANGE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_LISTENER, resourceId = input.listenerName,
+                details = string `Listener '${input.listenerName}' state changed to '${input.action}' by '${userContext.username}'`);
         return {
             success: true,
             message: string `Listener ${input.listenerName} state change dispatched to ${input.runtimeIds.length()} runtime(s)`,
@@ -1929,11 +1935,18 @@ service /graphql on graphqlListener {
         }
 
         // Branch to BI or MI implementation
+        types:UpdateLogLevelResponse levelResponse;
         if componentType == types:MI {
-            return check updateLogLevelMI(userContext, input);
+            levelResponse = check updateLogLevelMI(userContext, input);
         } else {
-            return check updateLogLevelBI(userContext, input);
+            levelResponse = check updateLogLevelBI(userContext, input);
         }
+        string? loggerLabelOpt = input?.loggerName is string ? input?.loggerName : input?.componentName;
+        string loggerLabel = loggerLabelOpt ?: "";
+        storage:logAuditEvent(storage:AUDIT_LOG_LEVEL_CHANGE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_LOGGER, resourceId = loggerLabel,
+                details = string `Log level changed for '${loggerLabel}' to '${input.logLevel}' by '${userContext.username}'`);
+        return levelResponse;
     }
 
     // ----------- Environment Resources
@@ -1961,7 +1974,13 @@ service /graphql on graphqlListener {
         environment.createdBy = userContext.userId;
 
         // Call storage layer to insert environments
-        return storage:createEnvironment(environment);
+        types:Environment? created = check storage:createEnvironment(environment);
+        if created is types:Environment {
+            storage:logAuditEvent(storage:AUDIT_ENVIRONMENT_CREATE, userId = userContext.userId,
+                    resourceType = storage:AUDIT_RESOURCE_ENVIRONMENT, resourceId = created.id,
+                    details = string `Environment '${environment.name}' created by '${userContext.username}'`);
+        }
+        return created;
     }
 
     // Get all environments (filtered by user's accessible environments via RBAC)
@@ -2054,6 +2073,9 @@ service /graphql on graphqlListener {
 
         check storage:deleteEnvironment(environmentId);
         check sync:reconcileDeleteEnvironment(environmentId);
+        storage:logAuditEvent(storage:AUDIT_ENVIRONMENT_DELETE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_ENVIRONMENT, resourceId = environmentId,
+                details = string `Environment '${env.name}' deleted by '${userContext.username}'`);
         return true;
     }
 
@@ -2089,7 +2111,11 @@ service /graphql on graphqlListener {
         }
 
         check storage:updateEnvironment(environmentId, name, handler, description, critical);
-        return check storage:getEnvironmentById(environmentId);
+        types:Environment? updated = check storage:getEnvironmentById(environmentId);
+        storage:logAuditEvent(storage:AUDIT_ENVIRONMENT_UPDATE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_ENVIRONMENT, resourceId = environmentId,
+                details = string `Environment '${currentEnv.name}' updated by '${userContext.username}'`);
+        return updated;
     }
 
     // Update environment production status (requires full management permission)
@@ -2112,6 +2138,9 @@ service /graphql on graphqlListener {
         }
 
         check storage:updateEnvironmentProductionStatus(environmentId, isProduction);
+        storage:logAuditEvent(storage:AUDIT_ENVIRONMENT_UPDATE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_ENVIRONMENT, resourceId = environmentId,
+                details = string `Environment '${env.name}' production status changed to ${isProduction} by '${userContext.username}'`);
         return check storage:getEnvironmentById(environmentId);
     }
 
@@ -2183,7 +2212,13 @@ service /graphql on graphqlListener {
         }
 
         // Create project and auto-assign creator to project admin group
-        return check storage:createProject(project, userContext);
+        types:Project? createdProject = check storage:createProject(project, userContext);
+        if createdProject is types:Project {
+            storage:logAuditEvent(storage:AUDIT_PROJECT_CREATE, userId = userContext.userId,
+                    resourceType = storage:AUDIT_RESOURCE_PROJECT, resourceId = createdProject.id,
+                    details = string `Project '${project.name}' created by '${userContext.username}'`);
+        }
+        return createdProject;
     }
 
     // Get all projects (filtered by user's accessible projects via RBAC v2)
@@ -2301,6 +2336,9 @@ service /graphql on graphqlListener {
 
         // Proceed with deletion if no components exist
         check storage:deleteProject(projectId);
+        storage:logAuditEvent(storage:AUDIT_PROJECT_DELETE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_PROJECT, resourceId = projectId,
+                details = string `Project '${projectId}' deleted by '${userContext.username}'`);
         return {
             status: "success",
             details: string `Deleted project with ID: ${projectId}`
@@ -2323,6 +2361,9 @@ service /graphql on graphqlListener {
         if updatedProject is () {
             return error("Project not found after update");
         }
+        storage:logAuditEvent(storage:AUDIT_PROJECT_UPDATE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_PROJECT, resourceId = project.id,
+                details = string `Project '${project.id}' updated by '${userContext.username}'`);
         return updatedProject;
     }
 
@@ -2364,6 +2405,11 @@ service /graphql on graphqlListener {
                 return error(string `The name "${component.name}" is already taken in this project. Try a different name.`);
             }
             return result;
+        }
+        if result is types:Component {
+            storage:logAuditEvent(storage:AUDIT_COMPONENT_CREATE, userId = userContext.userId,
+                    resourceType = storage:AUDIT_RESOURCE_COMPONENT, resourceId = result.id,
+                    details = string `Component '${component.name}' created in project '${component.projectId}' by '${userContext.username}'`);
         }
         return result;
     }
@@ -2500,6 +2546,9 @@ service /graphql on graphqlListener {
             check sync:reconcileDeleteComponent(componentId, envId);
         }
 
+        storage:logAuditEvent(storage:AUDIT_COMPONENT_DELETE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_COMPONENT, resourceId = componentId,
+                details = string `Component '${component.name}' deleted from project '${projectId}' by '${userContext.username}'`);
         return {
             status: "SUCCESS",
             canDelete: true,
@@ -2532,6 +2581,9 @@ service /graphql on graphqlListener {
 
         // Call the existing backend method to maintain consistency
         check storage:updateComponent(targetComponentId, targetName, targetDisplayName, targetDescription, userContext.userId);
+        storage:logAuditEvent(storage:AUDIT_COMPONENT_UPDATE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_COMPONENT, resourceId = targetComponentId,
+                details = string `Component '${targetName ?: targetComponentId}' updated by '${userContext.username}'`);
         return check storage:getComponentById(targetComponentId);
     }
 
@@ -2566,6 +2618,10 @@ service /graphql on graphqlListener {
         map<string> desiredProps = {"status": input.status == "active" ? "enabled" : "disabled"};
         [int, int] counts = check reconcilePerEnv(runtimes, input.componentId, artifact, desiredProps, sync:dispatchMI);
 
+        storage:logAuditEvent(storage:AUDIT_ARTIFACT_STATUS_CHANGE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_ARTIFACT,
+                resourceId = string `${input.componentId}/${input.artifactType}/${input.artifactName}`,
+                details = string `Artifact '${input.artifactName}' (${input.artifactType}) status changed to '${input.status}' by '${userContext.username}'`);
         return {
             status: counts[1] == 0 ? types:SUCCESS : types:FAILED,
             message: string `Artifact status change dispatched to ${counts[0] + counts[1]} runtime(s)`,
@@ -2725,11 +2781,17 @@ service /graphql on graphqlListener {
                     component.componentType.toString());
             log:printInfo(string `Component-bound org secret created for environment=${environmentId}, componentId=${componentId}`,
                     userId = userContext.userId);
+            storage:logAuditEvent(storage:AUDIT_ORG_SECRET_CREATE, userId = userContext.userId,
+                    resourceType = storage:AUDIT_RESOURCE_SECRET, resourceId = environmentId,
+                    details = string `Component-bound org secret created for environment '${environmentId}', component '${componentId}' by '${userContext.username}'`);
             return secret;
         }
 
         string secret = check storage:createOrgSecret(environmentId, userContext.userId);
         log:printInfo(string `Org secret created for environment=${environmentId}`, userId = userContext.userId);
+        storage:logAuditEvent(storage:AUDIT_ORG_SECRET_CREATE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_SECRET, resourceId = environmentId,
+                details = string `Org secret created for environment '${environmentId}' by '${userContext.username}'`);
         return secret;
     }
 
@@ -2742,6 +2804,9 @@ service /graphql on graphqlListener {
 
         check storage:revokeOrgSecret(keyId);
         log:printInfo(string `Org secret revoked keyId=${keyId}`, userId = userContext.userId);
+        storage:logAuditEvent(storage:AUDIT_ORG_SECRET_REVOKE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_SECRET, resourceId = keyId,
+                details = string `Org secret '${keyId}' revoked by '${userContext.username}'`);
         return true;
     }
 
@@ -3649,6 +3714,9 @@ service /graphql on graphqlListener {
         }
 
         log:printInfo("Successfully created MI user on runtime", username = username, runtimeId = runtimeId);
+        storage:logAuditEvent(storage:AUDIT_MI_USER_CREATE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_USER, resourceId = string `${runtimeId}/${username}`,
+                details = string `MI user '${username}' created on runtime '${runtimeId}' by '${userContext.username}'`);
         return {username, status: "Added"};
     }
 
@@ -3715,6 +3783,9 @@ service /graphql on graphqlListener {
         }
 
         log:printInfo("Successfully deleted MI user on runtime", username = username, runtimeId = runtimeId);
+        storage:logAuditEvent(storage:AUDIT_MI_USER_DELETE, userId = userContext.userId,
+                resourceType = storage:AUDIT_RESOURCE_USER, resourceId = string `${runtimeId}/${username}`,
+                details = string `MI user '${username}' deleted from runtime '${runtimeId}' by '${userContext.username}'`);
         return {username, status: "Deleted"};
     }
 
