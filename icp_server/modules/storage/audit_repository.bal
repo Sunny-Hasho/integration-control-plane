@@ -15,8 +15,8 @@
 // under the License.
 
 import ballerina/io;
+import ballerina/lang.runtime;
 import ballerina/log;
-import ballerina/sql;
 import ballerina/time;
 
 // ── Audit action constants ─────────────────────────────────────────────────
@@ -79,7 +79,7 @@ public const string AUDIT_ARTIFACT_TRACING_CHANGE = "ARTIFACT_TRACING_CHANGE";
 public const string AUDIT_ARTIFACT_STATISTICS_CHANGE = "ARTIFACT_STATISTICS_CHANGE";
 public const string AUDIT_ARTIFACT_TRIGGER = "ARTIFACT_TRIGGER";
 
-// Logger events
+// Logger / listener events
 public const string AUDIT_LOG_LEVEL_CHANGE = "LOG_LEVEL_CHANGE";
 public const string AUDIT_LOGGER_DELETE = "LOGGER_DELETE";
 public const string AUDIT_LISTENER_STATE_CHANGE = "LISTENER_STATE_CHANGE";
@@ -110,27 +110,36 @@ public const string AUDIT_RESOURCE_SECRET = "SECRET";
 // ── Module-level isolated state ────────────────────────────────────────────
 
 isolated boolean auditEnabled = false;
-isolated string auditFilePath = "";
+// JSONL lines queued for the background file-drainer strand.
+// string is immutable in Ballerina, so it is a valid isolated expression and
+// can be pushed/popped across lock boundaries.
+isolated string[] pendingAuditLines = [];
 
 // ── Initialization ─────────────────────────────────────────────────────────
 
-// Called once from init.bal to configure audit logging from the main module.
-public isolated function initAuditLogging(boolean enabled, string filePath) {
+// Called from the non-isolated init() in init.bal.
+// Starts a background strand that drains pendingAuditLines to the audit log
+// file, keeping I/O entirely out of the isolated logAuditEvent function.
+public function initAuditLogging(boolean enabled, string filePath) {
     lock {
         auditEnabled = enabled;
     }
-    lock {
-        auditFilePath = filePath;
-    }
+
     if enabled {
-        log:printInfo("Audit logging enabled", auditLogFile = filePath.length() > 0 ? filePath : "disabled");
+        log:printInfo("Audit logging enabled",
+                auditFile = filePath.length() > 0 ? filePath : "application log only");
+    }
+
+    if enabled && filePath.length() > 0 {
+        _ = start runAuditFileDrainer(filePath);
     }
 }
 
 // ── Core audit function ────────────────────────────────────────────────────
 
-// Write a single audit event to both the database and (optionally) a log file.
-// This function is isolated so it can be invoked from any isolated service resource.
+// Write a structured audit event to the application log and (when configured)
+// enqueue a JSONL line for the background file-drainer. Isolated so it can be
+// called from any isolated service resource.
 public isolated function logAuditEvent(
         string action,
         string? userId = (),
@@ -148,21 +157,8 @@ public isolated function logAuditEvent(
         return;
     }
 
-    string filePath;
-    lock {
-        filePath = auditFilePath;
-    }
-
-    // Write to database
-    sql:ExecutionResult|sql:Error dbResult = dbClient->execute(`
-        INSERT INTO audit_logs (user_id, action, resource_type, resource_id, details, client_ip, user_agent)
-        VALUES (${userId}, ${action}, ${resourceType}, ${resourceId}, ${details}, ${clientIp}, ${userAgent})
-    `);
-    if dbResult is sql:Error {
-        log:printError("Failed to persist audit event to database", dbResult, action = action);
-    }
-
-    // Log with a dedicated AUDIT prefix so operators can grep/filter from the application log.
+    // Always emit to the application log with an AUDIT prefix so the event
+    // is visible in any log aggregator / SIEM that reads the application log.
     log:printInfo("AUDIT",
             action = action,
             userId = userId ?: "",
@@ -171,28 +167,7 @@ public isolated function logAuditEvent(
             details = details ?: "",
             clientIp = clientIp ?: "");
 
-    // File writing is handled separately via writeAuditEventToFile(), which must
-    // be called from non-isolated contexts (e.g., from init.bal startup paths).
-    // Audit events flowing through isolated service handlers are captured in the
-    // DB and application log above; filePath is stored for reference only.
-    _ = filePath;
-}
-
-// ── Dedicated audit file writer ────────────────────────────────────────────
-
-// Appends a JSONL-formatted audit entry to the configured audit log file.
-// Called via `start` so it never blocks the caller.
-function appendAuditLine(
-        string filePath,
-        string action,
-        string? userId,
-        string? resourceType,
-        string? resourceId,
-        string? details,
-        string? clientIp
-) {
     string timestamp = buildTimestamp();
-
     json entry = {
         timestamp: timestamp,
         action: action,
@@ -202,14 +177,50 @@ function appendAuditLine(
         details: details,
         clientIp: clientIp
     };
+    string line = entry.toJsonString() + "\n";
 
-    error? writeResult = io:fileWriteString(filePath, entry.toJsonString() + "\n", option = io:APPEND);
-    if writeResult is error {
-        log:printError("Failed to write audit event to log file", writeResult, action = action, filePath = filePath);
+    // Enqueue for the background file-drainer.
+    // string is immutable, so it is a valid isolated expression that can cross
+    // the lock boundary.
+    lock {
+        pendingAuditLines.push(line);
     }
 }
 
-function buildTimestamp() returns string {
+// ── Background file drainer ────────────────────────────────────────────────
+
+// Runs as a separate strand (started from initAuditLogging). Opens the audit
+// log file once, then continuously drains pendingAuditLines until the process
+// exits. Uses a short sleep when the queue is empty to avoid busy-waiting.
+function runAuditFileDrainer(string filePath) {
+    io:WritableByteChannel|io:Error byteChannel = io:openWritableFile(filePath, option = io:APPEND);
+    if byteChannel is io:Error {
+        log:printError("Cannot open audit log file; file output disabled", byteChannel, filePath = filePath);
+        return;
+    }
+    io:WritableCharacterChannel charChannel = new (byteChannel, "UTF-8");
+    while true {
+        string? line = ();
+        lock {
+            if pendingAuditLines.length() > 0 {
+                line = pendingAuditLines.remove(0);
+            }
+        }
+        if line is string {
+            int|io:Error writeResult = charChannel.write(line, 0);
+            if writeResult is io:Error {
+                log:printError("Failed to write audit entry to log file", writeResult);
+            }
+        } else {
+            // Nothing queued — yield for 100 ms before checking again.
+            runtime:sleep(0.1);
+        }
+    }
+}
+
+// ── Timestamp helper ───────────────────────────────────────────────────────
+
+isolated function buildTimestamp() returns string {
     time:Utc utcNow = time:utcNow();
     time:Civil c = time:utcToCivil(utcNow);
     string month = c.month < 10 ? "0" + c.month.toString() : c.month.toString();
