@@ -298,6 +298,7 @@ service object {
 
     resource function post users(@http:Payload types:CreateUserInput request) returns http:Created|http:BadRequest|http:Unauthorized|http:InternalServerError|error {
 
+        log:printDebug("Received request to create new user", username = request.username);
         // Validate input
         if request.username.trim().length() == 0 {
             return utils:createBadRequestError("Username is required");
