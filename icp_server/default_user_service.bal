@@ -50,9 +50,13 @@ configurable int lockoutBaseMinutes = 15;
 configurable int lockoutMaxMinutes = 60;
 
 
-// Initialized in init() with resolved (decrypted) credentials
-final storage:DatabaseConnectionManager credentialsDbManager;
-final sql:Client credentialsDbClient;
+final string resolvedCredDbUser = check resolveSecret(credentialsDbUser);
+final string resolvedCredDbPassword = check resolveSecret(credentialsDbPassword);
+final storage:DatabaseConnectionManager credentialsDbManager = check new storage:DatabaseConnectionManager(
+    credentialsDbType, credentialsDbHost, credentialsDbPort,
+    credentialsDbName, resolvedCredDbUser, resolvedCredDbPassword
+);
+final sql:Client credentialsDbClient = credentialsDbManager.getClient();
 
 listener http:Listener defaultAuthServiceListener = new (authServicePort,
     config = {
@@ -66,6 +70,7 @@ listener http:Listener defaultAuthServiceListener = new (authServicePort,
     }
 );
 
+http:Service defaultUserService =
 @http:ServiceConfig {
     auth: [
         {
@@ -80,12 +85,9 @@ listener http:Listener defaultAuthServiceListener = new (authServicePort,
         }
     ]
 }
-service / on defaultAuthServiceListener {
+service object {
 
-    function init() {
-        log:printInfo("Authentication service started at " + authServiceHost + ":" + authServicePort.toString());
-    }
-    resource function post authenticate(types:Credentials request) returns http:Ok|http:BadRequest|http:Unauthorized|http:TooManyRequests|http:InternalServerError|error {
+    resource function post authenticate(@http:Payload types:Credentials request) returns http:Ok|http:BadRequest|http:Unauthorized|http:TooManyRequests|http:InternalServerError|error {
         log:printDebug("Authenticate request", username = request.username);
 
         types:UserCredentials|sql:Error credentials = credentialsDbClient->queryRow(
@@ -152,7 +154,7 @@ service / on defaultAuthServiceListener {
 
     }
 
-    resource function post unlock\-account(record {string username;} request) returns http:Ok|http:BadRequest|http:InternalServerError|error {
+    resource function post unlock\-account(@http:Payload record {string username;} request) returns http:Ok|http:BadRequest|http:InternalServerError|error {
         log:printDebug("Unlock account request", username = request.username);
         types:UserCredentials|sql:Error credentials = credentialsDbClient->queryRow(
             `SELECT user_id as userId, username, display_name as displayName,
@@ -172,7 +174,7 @@ service / on defaultAuthServiceListener {
         return <http:Ok>{body: {message: "Account unlocked"}};
     }
 
-    resource function post change\-password(types:ChangePasswordRequest request) returns http:Ok|http:BadRequest|http:Unauthorized|http:InternalServerError|error {
+    resource function post change\-password(@http:Payload types:ChangePasswordRequest request) returns http:Ok|http:BadRequest|http:Unauthorized|http:InternalServerError|error {
 
         // Validate request
         if request.currentPassword.trim().length() == 0 {
@@ -231,7 +233,7 @@ service / on defaultAuthServiceListener {
         };
     }
 
-    resource function post 'reset\-password(types:ResetPasswordRequest request) returns http:Ok|http:BadRequest|http:Unauthorized|http:InternalServerError|error {
+    resource function post 'reset\-password(@http:Payload types:ResetPasswordRequest request) returns http:Ok|http:BadRequest|http:Unauthorized|http:InternalServerError|error {
         // Verify user exists
         types:UserCredentials|error credentials = getUserCredentialsById(request.userId);
         if credentials is error {
@@ -267,7 +269,7 @@ service / on defaultAuthServiceListener {
         };
     }
 
-    resource function post 'force\-change\-password(types:ForceChangePasswordRequest request, string userId) returns http:Ok|http:BadRequest|http:InternalServerError|error {
+    resource function post 'force\-change\-password(@http:Payload types:ForceChangePasswordRequest request, string userId) returns http:Ok|http:BadRequest|http:InternalServerError|error {
         if request.newPassword.trim().length() == 0 {
             return utils:createBadRequestError("New password is required");
         }
@@ -294,7 +296,7 @@ service / on defaultAuthServiceListener {
         };
     }
 
-    resource function post users(types:CreateUserInput request) returns http:Created|http:BadRequest|http:Unauthorized|http:InternalServerError|error {
+    resource function post users(@http:Payload types:CreateUserInput request) returns http:Created|http:BadRequest|http:Unauthorized|http:InternalServerError|error {
 
         // Validate input
         if request.username.trim().length() == 0 {
@@ -349,7 +351,7 @@ service / on defaultAuthServiceListener {
             }
         };
     }
-}
+};
 
 isolated function parseIntOrZero(string? s) returns int {
     if s is () { return 0; }

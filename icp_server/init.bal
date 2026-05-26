@@ -14,7 +14,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import icp_server.storage;
 import icp_server.utils;
 
 import ballerina/http;
@@ -72,13 +71,6 @@ function init() returns error? {
         opensearchClient = opensearchClientResult;
         log:printInfo("OpenSearch client initialized successfully");
     }
-
-    // Initialize DB connection manager and DB client with resolved credentials
-    credentialsDbManager = check new storage:DatabaseConnectionManager(
-        credentialsDbType, credentialsDbHost, credentialsDbPort,
-        credentialsDbName, resolvedCredDbUser, resolvedCredDbPassword
-    );
-    credentialsDbClient = credentialsDbManager.getClient();
 
     // Initialize the runtime scheduler
     check initRuntimeScheduler();
