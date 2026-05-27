@@ -73,13 +73,6 @@ function init() returns error? {
         log:printInfo("OpenSearch client initialized successfully");
     }
 
-    // Initialize DB connection manager and DB client with resolved credentials
-    credentialsDbManager = check new storage:DatabaseConnectionManager(
-        credentialsDbType, credentialsDbHost, credentialsDbPort,
-        credentialsDbName, resolvedCredDbUser, resolvedCredDbPassword
-    );
-    credentialsDbClient = credentialsDbManager.getClient();
-
     // Initialize audit logging
     storage:initAuditLogging(enableAuditLogging, auditLogFilePath);
 

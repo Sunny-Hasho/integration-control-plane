@@ -79,15 +79,15 @@ function AddRolesToGroupDialog({
   const mutation = useAddRolesToGroup(orgHandler);
   const [selected, setSelected] = useState<Role[]>([]);
   const [envMode, setEnvMode] = useState<'all' | 'selected'>('all');
-  const [selectedEnvs, setSelectedEnvs] = useState<string[]>([]);
+  const [selectedEnv, setSelectedEnv] = useState<string>('');
   const [assignError, setAssignError] = useState<string | null>(null);
   const available = allRoles.filter((r) => !existingRoleIds.includes(r.roleId));
   const pending = mutation.isPending;
 
   const assign = () => {
-    if (envMode === 'selected' && selectedEnvs.length === 0) return;
+    if (envMode === 'selected' && !selectedEnv) return;
     setAssignError(null);
-    const envUuid = envMode === 'selected' && selectedEnvs.length > 0 ? selectedEnvs[0] : undefined;
+    const envUuid = envMode === 'selected' && selectedEnv ? selectedEnv : undefined;
     mutation.mutate(
       { groupId, roleIds: selected.map((r) => r.roleId), envUuid, projectId, integrationId: componentId },
       {
@@ -125,10 +125,10 @@ function AddRolesToGroupDialog({
             </Typography>
             <RadioGroup value={envMode} onChange={(e) => setEnvMode(e.target.value as 'all' | 'selected')}>
               <FormControlLabel value="all" control={<Radio />} label="All Environments" />
-              <FormControlLabel value="selected" control={<Radio />} label="Selected Environments" />
+              <FormControlLabel value="selected" control={<Radio />} label="Selected Environment" />
             </RadioGroup>
             {envMode === 'selected' && (
-              <TextField select fullWidth label="Select applicable environments" value={selectedEnvs[0] || ''} onChange={(e) => setSelectedEnvs(e.target.value ? [e.target.value] : [])} sx={{ mt: 2 }}>
+              <TextField select fullWidth label="Select applicable environment" value={selectedEnv} onChange={(e) => setSelectedEnv(e.target.value)} sx={{ mt: 2 }}>
                 {allEnvironments.map((env) => (
                   <MenuItem key={env.id} value={env.id}>
                     {env.name}
@@ -141,7 +141,7 @@ function AddRolesToGroupDialog({
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" disabled={selected.length === 0 || pending || (envMode === 'selected' && selectedEnvs.length === 0)} onClick={assign}>
+        <Button variant="contained" disabled={selected.length === 0 || pending || (envMode === 'selected' && !selectedEnv)} onClick={assign}>
           Add
         </Button>
       </DialogActions>

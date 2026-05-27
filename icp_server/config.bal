@@ -139,8 +139,6 @@ final string resolvedObservabilityJwtHMACSecret = check resolveSecret(observabil
 final string resolvedObservabilityTruststorePassword = check resolveSecret(observabilityTruststorePassword);
 final string resolvedOpensearchUsername = check resolveSecret(opensearchUsername);
 final string resolvedOpensearchPassword = check resolveSecret(opensearchPassword);
-final string resolvedCredDbUser = check resolveSecret(credentialsDbUser);
-final string resolvedCredDbPassword = check resolveSecret(credentialsDbPassword);
 
 // Build SSO configuration from configurable values
 public isolated function getSSOConfig() returns types:SSOConfig => {
