@@ -479,6 +479,13 @@ VALUES (
     1
 );
 
+-- Add default super admin user to Super Admins group
+INSERT INTO group_user_mapping (group_id, user_uuid)
+VALUES (
+    (SELECT group_id FROM user_groups WHERE group_name = 'Super Admins'),
+    '550e8400-e29b-41d4-a716-446655440000'
+);
+
 -- ============================================================================
 -- RUNTIMES & ARTIFACTS
 -- ============================================================================
