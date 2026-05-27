@@ -370,6 +370,10 @@ VALUES (
         'default'
     );
 
+-- Insert default super admin user
+INSERT INTO users (user_id, username, display_name, is_super_admin)
+VALUES ('550e8400-e29b-41d4-a716-446655440000', 'admin', 'Super Admin', TRUE);
+
 -- Insert pre-defined roles
 INSERT INTO roles_v2 (role_id, role_name, org_id, description) VALUES
 (UUID(), 'Super Admin', 1, 'Full access to all resources and permissions'),
