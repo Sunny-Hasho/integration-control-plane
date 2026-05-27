@@ -149,12 +149,6 @@ http:Service ldapUserService =
 }
 service object {
 
-    function init() {
-        log:printInfo("LDAP authentication adapter started",
-                host = ldapAuthServiceHost, port = ldapAuthServicePort,
-                ldapServer = ldapHostName + ":" + ldapPort.toString());
-    }
-
     resource function post authenticate(@http:Payload types:Credentials request) returns http:Ok|http:Unauthorized|http:InternalServerError|error {
 
         log:printDebug("LDAP authenticate request", username = request.username);
