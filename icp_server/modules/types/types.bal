@@ -2079,6 +2079,8 @@ public type UserContextV2 record {
     string username;
     string displayName;
     string[] permissions; // Flat list of permission names from JWT
+    string? clientIp = ();
+    string? userAgent = ();
 };
 
 // Database role record type

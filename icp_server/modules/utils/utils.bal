@@ -57,6 +57,19 @@ public isolated function initGraphQLContext(http:RequestContext reqCtx, http:Req
     if authorization is string {
         context.set("Authorization", authorization);
     }
+    string|http:HeaderNotFoundError xff = request.getHeader("X-Forwarded-For");
+    if xff is string {
+        context.set("clientIp", xff);
+    } else {
+        string|http:HeaderNotFoundError xri = request.getHeader("X-Real-IP");
+        if xri is string {
+            context.set("clientIp", xri);
+        }
+    }
+    string|http:HeaderNotFoundError ua = request.getHeader("User-Agent");
+    if ua is string {
+        context.set("userAgent", ua);
+    }
     return context;
 }
 
