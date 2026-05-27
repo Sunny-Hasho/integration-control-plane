@@ -115,16 +115,16 @@ function AssignRoleToGroupsDialog({ orgHandler, roleId, roleName, existingGroupI
   const mutation = useAddRolesToGroup(orgHandler);
   const [selected, setSelected] = useState<Group[]>([]);
   const [envMode, setEnvMode] = useState<'all' | 'selected'>('all');
-  const [selectedEnvs, setSelectedEnvs] = useState<string[]>([]);
+  const [selectedEnv, setSelectedEnv] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState('');
   const available = allGroups.filter((g) => !existingGroupIds.includes(g.groupId));
   const pending = mutation.isPending;
   const assign = async () => {
-    if (envMode === 'selected' && selectedEnvs.length === 0) {
+    if (envMode === 'selected' && !selectedEnv) {
       return;
     }
     setErrorMsg('');
-    const envUuid = envMode === 'selected' && selectedEnvs.length > 0 ? selectedEnvs[0] : undefined;
+    const envUuid = envMode === 'selected' && selectedEnv ? selectedEnv : undefined;
     const results = await Promise.all(
       selected.map((g) =>
         mutation.mutateAsync({ groupId: g.groupId, roleIds: [roleId], envUuid }).then(
@@ -169,10 +169,10 @@ function AssignRoleToGroupsDialog({ orgHandler, roleId, roleName, existingGroupI
             </Typography>
             <RadioGroup value={envMode} onChange={(e) => setEnvMode(e.target.value as 'all' | 'selected')}>
               <FormControlLabel value="all" control={<Radio />} label="All Environments" />
-              <FormControlLabel value="selected" control={<Radio />} label="Selected Environments" />
+              <FormControlLabel value="selected" control={<Radio />} label="Selected Environment" />
             </RadioGroup>
             {envMode === 'selected' && (
-              <TextField select fullWidth label="Select applicable environments" value={selectedEnvs[0] || ''} onChange={(e) => setSelectedEnvs(e.target.value ? [e.target.value] : [])} sx={{ mt: 2 }}>
+              <TextField select fullWidth label="Select applicable environment" value={selectedEnv} onChange={(e) => setSelectedEnv(e.target.value)} sx={{ mt: 2 }}>
                 {allEnvironments.map((env) => (
                   <MenuItem key={env.id} value={env.id}>
                     {env.name}
@@ -185,7 +185,7 @@ function AssignRoleToGroupsDialog({ orgHandler, roleId, roleName, existingGroupI
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" disabled={selected.length === 0 || pending || (envMode === 'selected' && selectedEnvs.length === 0)} onClick={assign}>
+        <Button variant="contained" disabled={selected.length === 0 || pending || (envMode === 'selected' && !selectedEnv)} onClick={assign}>
           Assign
         </Button>
       </DialogActions>
