@@ -43,6 +43,15 @@ public string adminToken = "";
 public string regularUserToken = "";
 public string projectAdminToken = "";
 
+// Attach the default auth service so tests can hit the auth endpoint.
+// main() is not called during `bal test`, so the service is never attached otherwise.
+@test:BeforeSuite
+function startAuthService() returns error? {
+    if !ldapUserStoreEnabled {
+        check defaultAuthServiceListener.attach(defaultUserService, "/");
+    }
+}
+
 // Initialize test tokens before running tests
 @test:BeforeSuite
 function initializeTestTokens() returns error? {

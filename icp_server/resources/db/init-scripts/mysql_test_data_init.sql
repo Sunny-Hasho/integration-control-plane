@@ -10,6 +10,17 @@ USE icp_database;
 -- ADDITIONAL TEST USERS
 -- ============================================================================
 
+-- Default super admin user (created at first login in production; pre-seeded here for tests
+-- that call storage functions directly without going through the login flow)
+INSERT INTO users (user_id, username, display_name, is_super_admin)
+VALUES ('550e8400-e29b-41d4-a716-446655440000', 'admin', 'Super Admin', TRUE);
+
+INSERT INTO group_user_mapping (group_id, user_uuid)
+VALUES (
+    (SELECT group_id FROM user_groups WHERE group_name = 'Super Admins'),
+    '550e8400-e29b-41d4-a716-446655440000'
+);
+
 -- User with org-level Developer permissions (can view all, edit non-prod)
 INSERT INTO users (user_id, username, display_name, is_super_admin)
 VALUES ('770e8400-e29b-41d4-a716-446655440001', 'orgdev', 'Org Developer', FALSE);

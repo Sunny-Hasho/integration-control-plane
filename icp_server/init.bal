@@ -14,6 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import icp_server.storage;
 import icp_server.utils;
 
 import ballerina/http;
@@ -71,6 +72,9 @@ function init() returns error? {
         opensearchClient = opensearchClientResult;
         log:printInfo("OpenSearch client initialized successfully");
     }
+
+    // Initialize audit logging
+    storage:initAuditLogging(enableAuditLogging, auditLogFilePath);
 
     // Initialize the runtime scheduler
     check initRuntimeScheduler();
