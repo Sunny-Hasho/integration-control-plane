@@ -1948,8 +1948,9 @@ service /graphql on graphqlListener {
         } else {
             levelResponse = check updateLogLevelBI(userContext, input);
         }
-        string? loggerLabelOpt = input?.loggerName is string ? input?.loggerName : input?.componentName;
-        string loggerLabel = loggerLabelOpt ?: "";
+        string loggerLabel = componentType == types:MI
+            ? (input?.loggerName ?: "")
+            : (input?.componentName ?: "");
         storage:logAuditEvent(storage:AUDIT_LOG_LEVEL_CHANGE, userId = userContext.userId,
                 resourceType = storage:AUDIT_RESOURCE_LOGGER, resourceId = loggerLabel,
                 details = string `Log level changed for '${loggerLabel}' to '${input.logLevel}' by '${userContext.username}'`,
