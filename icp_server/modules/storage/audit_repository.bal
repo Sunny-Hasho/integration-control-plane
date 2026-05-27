@@ -110,6 +110,10 @@ public const string AUDIT_RESOURCE_SECRET = "SECRET";
 // ── Module-level isolated state ────────────────────────────────────────────
 
 isolated boolean auditEnabled = false;
+// Set to true only while the file-drainer strand is running successfully.
+// Prevents unbounded queue growth when file output is disabled or the file
+// cannot be opened.
+isolated boolean auditFileDraining = false;
 // JSONL lines queued for the background file-drainer strand.
 // string is immutable in Ballerina, so it is a valid isolated expression and
 // can be pushed/popped across lock boundaries.
@@ -131,6 +135,9 @@ public function initAuditLogging(boolean enabled, string filePath) {
     }
 
     if enabled && filePath.length() > 0 {
+        lock {
+            auditFileDraining = true;
+        }
         _ = start runAuditFileDrainer(filePath);
     }
 }
@@ -179,11 +186,15 @@ public isolated function logAuditEvent(
     };
     string line = entry.toJsonString() + "\n";
 
-    // Enqueue for the background file-drainer.
-    // string is immutable, so it is a valid isolated expression that can cross
-    // the lock boundary.
+    // Enqueue for the background file-drainer only while it is active.
+    boolean fileDraining;
     lock {
-        pendingAuditLines.push(line);
+        fileDraining = auditFileDraining;
+    }
+    if fileDraining {
+        lock {
+            pendingAuditLines.push(line);
+        }
     }
 }
 
@@ -196,6 +207,9 @@ function runAuditFileDrainer(string filePath) {
     io:WritableByteChannel|io:Error byteChannel = io:openWritableFile(filePath, option = io:APPEND);
     if byteChannel is io:Error {
         log:printError("Cannot open audit log file; file output disabled", byteChannel, filePath = filePath);
+        lock {
+            auditFileDraining = false;
+        }
         return;
     }
     io:WritableCharacterChannel charChannel = new (byteChannel, "UTF-8");
