@@ -126,9 +126,12 @@ function testGetRuntimesOrgLevel() returns error? {
     string query = string `
         query {
             runtimes(componentId: "${COMPONENT_1_ID}") {
-                runtimeId
-                status
-                runtimeType
+                items {
+                    runtimeId
+                    status
+                    runtimeType
+                }
+                pageInfo { total limit offset }
             }
         }
     `;
@@ -140,8 +143,8 @@ function testGetRuntimesOrgLevel() returns error? {
 
     // Verify data exists
     json data = check response.data;
-    json runtimesJson = check data.runtimes;
-    json[] runtimes = check runtimesJson.ensureType();
+    json runtimesPage = check data.runtimes;
+    json[] runtimes = check runtimesPage.items.ensureType();
 
     // Org-level user should see runtimes for component 1
     test:assertTrue(runtimes.length() > 0, "Should return at least one runtime");
@@ -158,8 +161,11 @@ function testGetRuntimesProjectLevel() returns error? {
     string query = string `
         query {
             runtimes(componentId: "${COMPONENT_1_ID}") {
-                runtimeId
-                runtimeType
+                items {
+                    runtimeId
+                    runtimeType
+                }
+                pageInfo { total limit offset }
             }
         }
     `;
@@ -171,8 +177,8 @@ function testGetRuntimesProjectLevel() returns error? {
 
     // Verify data exists - project admin should see component 1 runtimes
     json data = check response.data;
-    json runtimesJson = check data.runtimes;
-    json[] runtimes = check runtimesJson.ensureType();
+    json runtimesPage = check data.runtimes;
+    json[] runtimes = check runtimesPage.items.ensureType();
 
     // Should see runtimes for component 1 (which is in Project 1)
     test:assertTrue(runtimes.length() > 0, "Project admin should see runtimes for their project's components");
