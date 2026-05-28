@@ -9,21 +9,23 @@ type Query {
     environmentId: String
     projectId: String
     componentId: String
-  ): [Runtime!]!
+    pagination: PaginationInput
+  ): RuntimesPage!
   runtime(runtimeId: String!): Runtime
-  services(runtimeId: String!): [Service!]!
-  listeners(runtimeId: String!): [Listener!]!
+  services(runtimeId: String!, pagination: PaginationInput): ServicesPage!
+  listeners(runtimeId: String!, pagination: PaginationInput): ListenersPage!
 
   # Org Secret Queries
-  orgSecrets(environmentId: String): [OrgSecretListEntry!]!
-  componentSecrets(componentId: String!, environmentId: String!): [BoundSecretEntry!]!
+  orgSecrets(environmentId: String, pagination: PaginationInput): OrgSecretsPage!
+  componentSecrets(componentId: String!, environmentId: String!, pagination: PaginationInput): BoundSecretsPage!
 
   # Environment Queries
   environments(
     orgUuid: String
     type: String
     projectId: String
-  ): [Environment!]!
+    pagination: PaginationInput
+  ): EnvironmentsPage!
   adminEnvironments: [Environment!]!
   environmentByHandler(environmentHandler: String!): Environment
   environmentHandlerAvailability(
@@ -31,8 +33,7 @@ type Query {
   ): EnvironmentHandlerAvailability!
 
   # Project Queries
-  projects(orgId: Int): [Project!]!
-  adminProjects: [Project!]!
+  projects(orgId: Int, pagination: PaginationInput): ProjectsPage!
   project(orgId: Int, projectId: String!): Project
   projectCreationEligibility(
     orgId: Int!
@@ -48,7 +49,7 @@ type Query {
     orgHandler: String!
     projectId: String
     options: ComponentOptionsInput
-  ): [Component!]!
+  ): ComponentsPage!
   component(
     componentId: String
     projectId: String
@@ -67,63 +68,78 @@ type Query {
   servicesByEnvironmentAndComponent(
     environmentId: String!
     componentId: String!
-  ): [Service!]!
+    pagination: PaginationInput
+  ): ServicesPage!
   listenersByEnvironmentAndComponent(
     environmentId: String!
     componentId: String!
-  ): [Listener!]!
+    pagination: PaginationInput
+  ): ListenersPage!
   restApisByEnvironmentAndComponent(
     environmentId: String!
     componentId: String!
-  ): [RestApi!]!
+    pagination: PaginationInput
+  ): RestApisPage!
   proxyServicesByEnvironmentAndComponent(
     environmentId: String!
     componentId: String!
-  ): [ProxyService!]!
+    pagination: PaginationInput
+  ): ProxyServicesPage!
   endpointsByEnvironmentAndComponent(
     environmentId: String!
     componentId: String!
-  ): [MIEndpoint!]!
+    pagination: PaginationInput
+  ): EndpointsPage!
   inboundEndpointsByEnvironmentAndComponent(
     environmentId: String!
     componentId: String!
-  ): [InboundEndpoint!]!
+    pagination: PaginationInput
+  ): InboundEndpointsPage!
   sequencesByEnvironmentAndComponent(
     environmentId: String!
     componentId: String!
-  ): [Sequence!]!
+    pagination: PaginationInput
+  ): SequencesPage!
   tasksByEnvironmentAndComponent(
     environmentId: String!
     componentId: String!
-  ): [Task!]!
+    pagination: PaginationInput
+  ): TasksPage!
   templatesByEnvironmentAndComponent(
     environmentId: String!
     componentId: String!
-  ): [Template!]!
+    pagination: PaginationInput
+  ): TemplatesPage!
   messageStoresByEnvironmentAndComponent(
     environmentId: String!
     componentId: String!
-  ): [MessageStore!]!
+    pagination: PaginationInput
+  ): MessageStoresPage!
   messageProcessorsByEnvironmentAndComponent(
     environmentId: String!
     componentId: String!
-  ): [MessageProcessor!]!
+    pagination: PaginationInput
+  ): MessageProcessorsPage!
   localEntriesByEnvironmentAndComponent(
     environmentId: String!
     componentId: String!
-  ): [LocalEntry!]!
+    pagination: PaginationInput
+  ): LocalEntriesPage!
   dataServicesByEnvironmentAndComponent(
     environmentId: String!
     componentId: String!
-  ): [DataService!]!
+    pagination: PaginationInput
+  ): DataServicesPage!
   dataSourcesByEnvironmentAndComponent(
     environmentId: String!
     componentId: String!
-  ): [DataSource!]!
+    pagination: PaginationInput
+  ): DataSourcesPage!
   compositeAppsByEnvironmentAndComponent(
     environmentId: String!
     componentId: String!
-  ): [CompositeApp!]!
+    pagination: PaginationInput
+  ): CompositeAppsPage!
   compositeAppFaultStackTrace(
     runtimeId: String!
     appName: String!
@@ -131,25 +147,28 @@ type Query {
   connectorsByEnvironmentAndComponent(
     environmentId: String!
     componentId: String!
-  ): [Connector!]!
+    pagination: PaginationInput
+  ): ConnectorsPage!
   registryResourcesByEnvironmentAndComponent(
     environmentId: String!
     componentId: String!
-  ): [RegistryResource!]!
+    pagination: PaginationInput
+  ): RegistryResourcesPage!
 
   # Logger Queries
-  loggersByRuntime(runtimeId: String!): [Logger!]!
+  loggersByRuntime(runtimeId: String!, pagination: PaginationInput): LoggersPage!
   loggersByEnvironmentAndComponent(
     environmentId: String!
     componentId: String!
-  ): [LoggerGroup!]!
+    pagination: PaginationInput
+  ): LoggerGroupsPage!
 
   # Log File Queries
-  logFilesByRuntime(runtimeId: String!, searchKey: String): LogFilesResponse!
+  logFilesByRuntime(runtimeId: String!, searchKey: String, pagination: PaginationInput): LogFilesResponse!
   logFileContent(runtimeId: String!, fileName: String!): String!
 
   # MI Runtime User Management Queries
-  getMIUsers(componentId: String!, runtimeId: String!): MIUsersResponse!
+  getMIUsers(componentId: String!, runtimeId: String!, pagination: PaginationInput): MIUsersPage!
   # Registry Resource Browser Queries
   registryDirectory(runtimeId: String!, path: String!, expand: Boolean): RegistryDirectoryResponse!
   registryFileContent(runtimeId: String!, path: String!): String!
@@ -345,6 +364,152 @@ type LogFile {
 type LogFilesResponse {
   count: Int!
   files: [LogFile!]!
+  pageInfo: PageInfo!
+}
+
+# ============================================
+# Pagination Types
+# ============================================
+type PageInfo {
+  total: Int!
+  limit: Int!
+  offset: Int!
+}
+
+
+type ComponentsPage {
+  items: [Component!]!
+  pageInfo: PageInfo!
+}
+
+type RuntimesPage {
+  items: [Runtime!]!
+  pageInfo: PageInfo!
+}
+
+type ProjectsPage {
+  items: [Project!]!
+  pageInfo: PageInfo!
+}
+
+type OrgSecretsPage {
+  items: [OrgSecretListEntry!]!
+  pageInfo: PageInfo!
+}
+
+type ServicesPage {
+  items: [Service!]!
+  pageInfo: PageInfo!
+}
+
+type ListenersPage {
+  items: [Listener!]!
+  pageInfo: PageInfo!
+}
+
+type RestApisPage {
+  items: [RestApi!]!
+  pageInfo: PageInfo!
+}
+
+type ProxyServicesPage {
+  items: [ProxyService!]!
+  pageInfo: PageInfo!
+}
+
+type EndpointsPage {
+  items: [MIEndpoint!]!
+  pageInfo: PageInfo!
+}
+
+type InboundEndpointsPage {
+  items: [InboundEndpoint!]!
+  pageInfo: PageInfo!
+}
+
+type SequencesPage {
+  items: [Sequence!]!
+  pageInfo: PageInfo!
+}
+
+type TasksPage {
+  items: [Task!]!
+  pageInfo: PageInfo!
+}
+
+type TemplatesPage {
+  items: [Template!]!
+  pageInfo: PageInfo!
+}
+
+type MessageStoresPage {
+  items: [MessageStore!]!
+  pageInfo: PageInfo!
+}
+
+type MessageProcessorsPage {
+  items: [MessageProcessor!]!
+  pageInfo: PageInfo!
+}
+
+type LocalEntriesPage {
+  items: [LocalEntry!]!
+  pageInfo: PageInfo!
+}
+
+type DataServicesPage {
+  items: [DataService!]!
+  pageInfo: PageInfo!
+}
+
+type DataSourcesPage {
+  items: [DataSource!]!
+  pageInfo: PageInfo!
+}
+
+type CompositeAppsPage {
+  items: [CompositeApp!]!
+  pageInfo: PageInfo!
+}
+
+type ConnectorsPage {
+  items: [Connector!]!
+  pageInfo: PageInfo!
+}
+
+type RegistryResourcesPage {
+  items: [RegistryResource!]!
+  pageInfo: PageInfo!
+}
+
+type LoggerGroupsPage {
+  items: [LoggerGroup!]!
+  pageInfo: PageInfo!
+}
+
+type AutomationsPage {
+  items: [Automation!]!
+  pageInfo: PageInfo!
+}
+
+type LoggersPage {
+  items: [Logger!]!
+  pageInfo: PageInfo!
+}
+
+type BoundSecretsPage {
+  items: [BoundSecretEntry!]!
+  pageInfo: PageInfo!
+}
+
+type EnvironmentsPage {
+  items: [Environment!]!
+  pageInfo: PageInfo!
+}
+
+type MIUsersPage {
+  items: [MIUser!]!
+  pageInfo: PageInfo!
 }
 
 # ============================================
