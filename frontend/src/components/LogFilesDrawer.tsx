@@ -51,7 +51,7 @@ export function LogFilesDrawer({ runtimeId, onClose }: LogFilesDrawerProps): JSX
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
-  const { data: logFilesData, isLoading } = useLogFilesByRuntime(runtimeId, searchQuery || undefined);
+  const { data: logFilesData, isLoading } = useLogFilesByRuntime(runtimeId, searchQuery || undefined, rowsPerPage, page * rowsPerPage);
 
   const handleDownload = async (fileName: string) => {
     try {
@@ -88,10 +88,7 @@ export function LogFilesDrawer({ runtimeId, onClose }: LogFilesDrawerProps): JSX
   };
 
   const files = logFilesData?.files ?? [];
-
-  const maxPage = Math.max(0, Math.ceil(files.length / rowsPerPage) - 1);
-  const safePage = Math.min(page, maxPage);
-  const paged = files.slice(safePage * rowsPerPage, safePage * rowsPerPage + rowsPerPage);
+  const total = logFilesData?.count ?? 0;
 
   return (
     <Drawer anchor="right" open onClose={onClose} variant="persistent" sx={drawerSx}>
@@ -105,17 +102,17 @@ export function LogFilesDrawer({ runtimeId, onClose }: LogFilesDrawerProps): JSX
       </Stack>
 
       <Box sx={{ p: 2 }}>
-        <SearchField value={searchQuery} onChange={setSearchQuery} placeholder="Search log files..." sx={{ mb: 2, width: '100%' }} />
+        <SearchField value={searchQuery} onChange={(v) => { setSearchQuery(v); setPage(0); }} placeholder="Search log files..." sx={{ mb: 2, width: '100%' }} />
 
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          {files.length} log file{files.length !== 1 ? 's' : ''} found
+          {total} log file{total !== 1 ? 's' : ''} found
         </Typography>
 
         {isLoading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
             <CircularProgress />
           </Box>
-        ) : files.length === 0 ? (
+        ) : total === 0 ? (
           <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
             {searchQuery ? 'No log files match your search.' : 'No log files available.'}
           </Typography>
@@ -130,7 +127,7 @@ export function LogFilesDrawer({ runtimeId, onClose }: LogFilesDrawerProps): JSX
                 </ListingTable.Row>
               </ListingTable.Head>
               <ListingTable.Body>
-                {paged.map((file) => (
+                {files.map((file) => (
                   <ListingTable.Row key={file.fileName}>
                     <ListingTable.Cell>
                       <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
@@ -147,12 +144,12 @@ export function LogFilesDrawer({ runtimeId, onClose }: LogFilesDrawerProps): JSX
                 ))}
               </ListingTable.Body>
             </ListingTable>
-            {files.length > rowsPerPage && (
+            {total > 0 && (
               <TablePagination
                 sx={{ borderTop: '1px solid', borderColor: 'divider', mt: 1 }}
                 component="div"
-                count={files.length}
-                page={safePage}
+                count={total}
+                page={page}
                 onPageChange={(_, p) => setPage(p)}
                 rowsPerPage={rowsPerPage}
                 onRowsPerPageChange={(e) => {

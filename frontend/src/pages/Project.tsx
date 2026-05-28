@@ -24,7 +24,7 @@ import SearchField from '../components/SearchField';
 import DeleteIntegrationDialog from '../components/DeleteIntegrationDialog';
 import { useNavigate } from 'react-router';
 import { useState, type JSX } from 'react';
-import { useProjectByHandler, useComponents, type GqlComponent } from '../api/queries';
+import { useProjectByHandler, useComponents, useComponentsPage, type GqlComponent } from '../api/queries';
 import NotFound from '../components/NotFound';
 import { formatDistanceToNow } from '../utils/time';
 import { resourceUrl, narrow, broaden, newComponentUrl, type ProjectScope } from '../nav';
@@ -34,18 +34,12 @@ import Authorized from '../components/Authorized';
 import { useLoadProjectPermissions } from '../hooks/usePermissionLoader';
 
 function IntegrationsTable({
-  components,
-  isLoading,
-  isRefreshing,
-  onRefresh,
+  orgHandler,
   scope,
   projectId,
   onSelect,
 }: {
-  components: GqlComponent[];
-  isLoading: boolean;
-  isRefreshing: boolean;
-  onRefresh: () => void;
+  orgHandler: string;
   scope: ProjectScope;
   projectId: string;
   onSelect: (handler: string) => void;
@@ -55,11 +49,13 @@ function IntegrationsTable({
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [deleting, setDeleting] = useState<GqlComponent | null>(null);
+  const { data, isLoading, isFetching: isRefreshing, refetch } = useComponentsPage(orgHandler, projectId, query ? 500 : rowsPerPage, query ? 0 : page * rowsPerPage);
+  const components = data?.items ?? [];
+  const serverTotal = data?.pageInfo?.total ?? 0;
   const q = query.trim().toLowerCase();
   const filtered = components.filter((c) => !q || c.displayName.toLowerCase().includes(q) || c.description?.toLowerCase().includes(q) || c.componentType?.toLowerCase().includes(q));
-  const maxPage = Math.max(0, Math.ceil(filtered.length / rowsPerPage) - 1);
-  const safePage = Math.min(page, maxPage);
-  const paginated = filtered.slice(safePage * rowsPerPage, safePage * rowsPerPage + rowsPerPage);
+  const displayItems = query ? filtered.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage) : filtered;
+  const total = query ? filtered.length : serverTotal;
 
   return (
     <section>
@@ -70,12 +66,12 @@ function IntegrationsTable({
         <IconButton
           size="small"
           aria-label="Refresh integrations"
-          onClick={onRefresh}
+          onClick={() => refetch()}
           disabled={isRefreshing}
           sx={isRefreshing ? { '@keyframes spin': { from: { transform: 'rotate(0deg)' }, to: { transform: 'rotate(360deg)' } }, '& svg': { animation: 'spin 1s linear infinite' } } : undefined}>
           <RefreshCw size={16} />
         </IconButton>
-        <SearchField value={query} onChange={setQuery} placeholder="Search" sx={{ flex: 1 }} />
+        <SearchField value={query} onChange={(v) => { setQuery(v); setPage(0); }} placeholder="Search" sx={{ flex: 1 }} />
         <Authorized permissions={Permissions.INTEGRATION_MANAGE}>
           <Button variant="contained" startIcon={<Plus size={16} />} onClick={() => navigate(newComponentUrl(scope))}>
             Create Integration
@@ -102,7 +98,7 @@ function IntegrationsTable({
               </ListingTable.Row>
             </ListingTable.Head>
             <ListingTable.Body>
-              {paginated.map((c) => (
+              {displayItems.map((c) => (
                 <ListingTable.Row
                   key={c.id}
                   variant="card"
@@ -169,23 +165,31 @@ function IntegrationsTable({
           </ListingTable>
         </ListingTable.Container>
       )}
-      {filtered.length > 10 && (
-        <TablePagination
-          component="div"
-          count={filtered.length}
-          page={safePage}
-          onPageChange={(_, p) => setPage(p)}
-          rowsPerPage={rowsPerPage}
-          onRowsPerPageChange={(e) => {
-            setRowsPerPage(parseInt(e.target.value, 10));
-            setPage(0);
+      <TablePagination
+        component="div"
+        count={total}
+        page={page}
+        onPageChange={(_, p) => setPage(p)}
+        rowsPerPage={rowsPerPage}
+        onRowsPerPageChange={(e) => {
+          setRowsPerPage(parseInt(e.target.value, 10));
+          setPage(0);
+        }}
+        rowsPerPageOptions={[5, 10, 20, 50]}
+        sx={{ mt: 1 }}
+      />
+
+      {deleting && (
+        <DeleteIntegrationDialog
+          component={deleting}
+          orgHandler={scope.org}
+          projectId={projectId}
+          onClose={() => setDeleting(null)}
+          onDeleted={() => {
+            if (page > 0 && page * rowsPerPage >= serverTotal - 1) setPage((p) => p - 1);
           }}
-          rowsPerPageOptions={[10, 20, 50]}
-          sx={{ mt: 1 }}
         />
       )}
-
-      {deleting && <DeleteIntegrationDialog component={deleting} orgHandler={scope.org} projectId={projectId} onClose={() => setDeleting(null)} />}
     </section>
   );
 }
@@ -195,7 +199,7 @@ export default function Project(scope: ProjectScope): JSX.Element {
   const { data: project, isLoading: loadingProject } = useProjectByHandler(scope.project);
   const projectId = project?.id ?? '';
   useLoadProjectPermissions(scope.org, projectId);
-  const { data: components = [], isLoading: loadingComponents, isFetching: fetchingComponents, refetch: refetchComponents } = useComponents(scope.org, projectId);
+  const { data: components = [] } = useComponents(scope.org, projectId);
 
   if (loadingProject) {
     return (
@@ -223,10 +227,7 @@ export default function Project(scope: ProjectScope): JSX.Element {
       <Grid container spacing={3}>
         <Grid size={{ xs: 12, md: 8 }}>
           <IntegrationsTable
-            components={components}
-            isLoading={loadingComponents}
-            isRefreshing={fetchingComponents && !loadingComponents}
-            onRefresh={refetchComponents}
+            orgHandler={scope.org}
             scope={scope}
             projectId={projectId}
             onSelect={(handler) => navigate(resourceUrl(narrow(scope, handler), 'overview'))}

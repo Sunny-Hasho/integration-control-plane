@@ -749,8 +749,8 @@ export function AutomationExecutions({ artifact }: TabProps) {
   // Sort by selected column
   const sorted = [...filtered].sort((a, b) => {
     const { key, direction } = sort;
-    let aValue = a[key];
-    let bValue = b[key];
+    const aValue = a[key];
+    const bValue = b[key];
     if (key === 'timestamp') {
       // Compare as numbers (date ms) if sorting by timestamp
       const aTime = new Date(a.timestamp).getTime();
