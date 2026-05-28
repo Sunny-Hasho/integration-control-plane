@@ -2558,10 +2558,10 @@ public type MIUsersPage record {
     PageInfo pageInfo;
 };
 
-public type MIUserOperationResponse record {|
+public type MIUserOperationResponse record {
     string username;
     string status;
-|};
+};
 
 public type ValidatedRuntime record {|
     string runtimeId;
