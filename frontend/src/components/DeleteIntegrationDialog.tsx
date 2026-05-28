@@ -26,9 +26,10 @@ interface DeleteIntegrationDialogProps {
   orgHandler: string;
   projectId: string;
   onClose: () => void;
+  onDeleted?: () => void;
 }
 
-export default function DeleteIntegrationDialog({ component, orgHandler, projectId, onClose }: DeleteIntegrationDialogProps) {
+export default function DeleteIntegrationDialog({ component, orgHandler, projectId, onClose, onDeleted }: DeleteIntegrationDialogProps) {
   const [confirmation, setConfirmation] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const mutation = useDeleteComponent();
@@ -41,6 +42,7 @@ export default function DeleteIntegrationDialog({ component, orgHandler, project
       {
         onSuccess: (data) => {
           if (data.canDelete) {
+            onDeleted?.();
             onClose();
           } else {
             setErrorMessage(data.message || 'Cannot delete integration. Please try again.');
