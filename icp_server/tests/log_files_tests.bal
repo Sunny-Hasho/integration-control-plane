@@ -29,6 +29,8 @@ import ballerina/test;
 // =============================================================================
 
 const string LF_INVALID_RUNTIME_ID = "00000000-0000-0000-0000-000000000003";
+// Runtime 3 is seeded as OFFLINE (Project 1, Component 2, Dev env)
+const string LF_OFFLINE_RUNTIME_ID = "880e8400-e29b-41d4-a716-446655440003";
 
 string lfNoPermToken = "";
 
@@ -76,8 +78,8 @@ function testLogFilesByRuntimeNotFound() returns error? {
 
 // =============================================================================
 // Test 2: logFilesByRuntime — offline runtime returns GraphQL error
-//         All seeded runtimes are marked OFFLINE at server startup, so
-//         RUNTIME_1_ID reliably exercises the "not online" error path.
+//         LF_OFFLINE_RUNTIME_ID (Runtime 3) is seeded with status OFFLINE so
+//         it reliably exercises the "not online" error path.
 // =============================================================================
 
 @test:Config {
@@ -86,7 +88,7 @@ function testLogFilesByRuntimeNotFound() returns error? {
 function testLogFilesByRuntimeOffline() returns error? {
     string query = string `
         query {
-            logFilesByRuntime(runtimeId: "${RUNTIME_1_ID}") {
+            logFilesByRuntime(runtimeId: "${LF_OFFLINE_RUNTIME_ID}") {
                 count
                 files { fileName size }
                 pageInfo { total limit offset }
@@ -150,7 +152,7 @@ function testLogFilesByRuntimeNoPermission() returns error? {
 function testLogFilesByRuntimeOfflineWithSearchKey() returns error? {
     string query = string `
         query {
-            logFilesByRuntime(runtimeId: "${RUNTIME_1_ID}", searchKey: "wso2") {
+            logFilesByRuntime(runtimeId: "${LF_OFFLINE_RUNTIME_ID}", searchKey: "wso2") {
                 count
                 files { fileName size }
                 pageInfo { total limit offset }
@@ -177,7 +179,7 @@ function testLogFilesByRuntimeOfflineWithSearchKey() returns error? {
 function testLogFilesByRuntimeOfflineWithPagination() returns error? {
     string query = string `
         query {
-            logFilesByRuntime(runtimeId: "${RUNTIME_1_ID}",
+            logFilesByRuntime(runtimeId: "${LF_OFFLINE_RUNTIME_ID}",
                               pagination: { limit: 5, offset: 0 }) {
                 count
                 files { fileName size }
