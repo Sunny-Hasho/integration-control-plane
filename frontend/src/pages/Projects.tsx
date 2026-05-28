@@ -148,10 +148,7 @@ export default function Projects(scope: OrgScope): JSX.Element {
   const [confirmText, setConfirmText] = useState('');
   const { hasOrgPermission } = useAccessControl();
   const canCreateProject = hasOrgPermission(Permissions.PROJECT_MANAGE);
-  const { data, isLoading, refetch } = useProjectsPage(
-    query ? 500 : rowsPerPage,
-    query ? 0 : page * rowsPerPage,
-  );
+  const { data, isLoading, refetch } = useProjectsPage(query ? 500 : rowsPerPage, query ? 0 : page * rowsPerPage);
   const projects = data?.items ?? [];
   const serverTotal = data?.pageInfo?.total ?? 0;
   const deleteMutation = useDeleteProject();
@@ -226,7 +223,15 @@ export default function Projects(scope: OrgScope): JSX.Element {
       </PageTitle>
 
       <Stack direction="row" gap={2} alignItems="center" sx={{ mb: 3 }}>
-        <SearchField value={query} onChange={(v) => { setQuery(v); setPage(0); }} placeholder="Search projects" fullWidth />
+        <SearchField
+          value={query}
+          onChange={(v) => {
+            setQuery(v);
+            setPage(0);
+          }}
+          placeholder="Search projects"
+          fullWidth
+        />
         <Authorized permissions={Permissions.PROJECT_MANAGE}>
           <Button variant="contained" startIcon={<Plus size={20} />} onClick={() => navigate(newProjectUrl(scope))} sx={{ whiteSpace: 'nowrap' }}>
             Create Project

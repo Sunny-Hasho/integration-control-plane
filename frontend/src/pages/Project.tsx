@@ -33,17 +33,7 @@ import { Permissions } from '../constants/permissions';
 import Authorized from '../components/Authorized';
 import { useLoadProjectPermissions } from '../hooks/usePermissionLoader';
 
-function IntegrationsTable({
-  orgHandler,
-  scope,
-  projectId,
-  onSelect,
-}: {
-  orgHandler: string;
-  scope: ProjectScope;
-  projectId: string;
-  onSelect: (handler: string) => void;
-}) {
+function IntegrationsTable({ orgHandler, scope, projectId, onSelect }: { orgHandler: string; scope: ProjectScope; projectId: string; onSelect: (handler: string) => void }) {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
@@ -71,7 +61,15 @@ function IntegrationsTable({
           sx={isRefreshing ? { '@keyframes spin': { from: { transform: 'rotate(0deg)' }, to: { transform: 'rotate(360deg)' } }, '& svg': { animation: 'spin 1s linear infinite' } } : undefined}>
           <RefreshCw size={16} />
         </IconButton>
-        <SearchField value={query} onChange={(v) => { setQuery(v); setPage(0); }} placeholder="Search" sx={{ flex: 1 }} />
+        <SearchField
+          value={query}
+          onChange={(v) => {
+            setQuery(v);
+            setPage(0);
+          }}
+          placeholder="Search"
+          sx={{ flex: 1 }}
+        />
         <Authorized permissions={Permissions.INTEGRATION_MANAGE}>
           <Button variant="contained" startIcon={<Plus size={16} />} onClick={() => navigate(newComponentUrl(scope))}>
             Create Integration
@@ -226,12 +224,7 @@ export default function Project(scope: ProjectScope): JSX.Element {
 
       <Grid container spacing={3}>
         <Grid size={{ xs: 12, md: 8 }}>
-          <IntegrationsTable
-            orgHandler={scope.org}
-            scope={scope}
-            projectId={projectId}
-            onSelect={(handler) => navigate(resourceUrl(narrow(scope, handler), 'overview'))}
-          />
+          <IntegrationsTable orgHandler={scope.org} scope={scope} projectId={projectId} onSelect={(handler) => navigate(resourceUrl(narrow(scope, handler), 'overview'))} />
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
           <Stack gap={3}>

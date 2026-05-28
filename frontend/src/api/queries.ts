@@ -90,16 +90,14 @@ const COMPONENTS_PAGE_QUERY = `
 export function useProjects() {
   return useQuery({
     queryKey: ['projects'],
-    queryFn: () =>
-      gql<{ projects: { items: GqlProject[]; pageInfo: GqlPageInfo } }>(PROJECTS_QUERY).then((d) => d.projects.items),
+    queryFn: () => gql<{ projects: { items: GqlProject[]; pageInfo: GqlPageInfo } }>(PROJECTS_QUERY).then((d) => d.projects.items),
   });
 }
 
 export function useProjectsPage(limit: number, offset: number) {
   return useQuery({
     queryKey: ['projects', 'page', limit, offset],
-    queryFn: () =>
-      gql<{ projects: { items: GqlProject[]; pageInfo: GqlPageInfo } }>(PROJECTS_PAGE_QUERY, { limit, offset }).then((d) => d.projects),
+    queryFn: () => gql<{ projects: { items: GqlProject[]; pageInfo: GqlPageInfo } }>(PROJECTS_PAGE_QUERY, { limit, offset }).then((d) => d.projects),
   });
 }
 
@@ -173,9 +171,7 @@ export function useEnvironmentHandlerAvailability(handler: string) {
 export function useComponents(orgHandler: string, projectId: string) {
   return useQuery({
     queryKey: ['components', orgHandler, projectId],
-    queryFn: () =>
-      gql<{ components: { items: GqlComponent[]; pageInfo: GqlPageInfo } }>(COMPONENTS_QUERY, { orgHandler, projectId })
-        .then((d) => d.components.items),
+    queryFn: () => gql<{ components: { items: GqlComponent[]; pageInfo: GqlPageInfo } }>(COMPONENTS_QUERY, { orgHandler, projectId }).then((d) => d.components.items),
     enabled: !!orgHandler && !!projectId,
   });
 }
@@ -183,9 +179,7 @@ export function useComponents(orgHandler: string, projectId: string) {
 export function useComponentsPage(orgHandler: string, projectId: string, limit: number, offset: number) {
   return useQuery({
     queryKey: ['components', 'page', orgHandler, projectId, limit, offset],
-    queryFn: () =>
-      gql<{ components: { items: GqlComponent[]; pageInfo: GqlPageInfo } }>(COMPONENTS_PAGE_QUERY, { orgHandler, projectId, limit, offset })
-        .then((d) => d.components),
+    queryFn: () => gql<{ components: { items: GqlComponent[]; pageInfo: GqlPageInfo } }>(COMPONENTS_PAGE_QUERY, { orgHandler, projectId, limit, offset }).then((d) => d.components),
     enabled: !!orgHandler && !!projectId,
   });
 }
@@ -305,9 +299,7 @@ const RUNTIMES_QUERY = `
 export function useRuntimes(envId: string, projectId: string, componentId: string) {
   return useQuery({
     queryKey: ['runtimes', envId, projectId, componentId],
-    queryFn: () =>
-      gql<{ runtimes: { items: GqlRuntime[]; pageInfo: GqlPageInfo } }>(RUNTIMES_QUERY, { environmentId: envId, projectId, componentId })
-        .then((d) => d.runtimes.items),
+    queryFn: () => gql<{ runtimes: { items: GqlRuntime[]; pageInfo: GqlPageInfo } }>(RUNTIMES_QUERY, { environmentId: envId, projectId, componentId }).then((d) => d.runtimes.items),
     enabled: !!envId && !!projectId && !!componentId,
   });
 }
@@ -325,9 +317,7 @@ const COMPONENT_RUNTIMES_QUERY = `
 export function useComponentRuntimes(envId: string, projectId: string, componentId: string, enabled = true) {
   return useQuery({
     queryKey: ['componentRuntimes', envId, projectId, componentId],
-    queryFn: () =>
-      gql<{ runtimes: { items: GqlRuntime[]; pageInfo: GqlPageInfo } }>(COMPONENT_RUNTIMES_QUERY, { environmentId: envId, projectId, componentId })
-        .then((d) => d.runtimes.items),
+    queryFn: () => gql<{ runtimes: { items: GqlRuntime[]; pageInfo: GqlPageInfo } }>(COMPONENT_RUNTIMES_QUERY, { environmentId: envId, projectId, componentId }).then((d) => d.runtimes.items),
     enabled: enabled && !!envId && !!projectId && !!componentId,
   });
 }
@@ -346,9 +336,7 @@ const PROJECT_RUNTIMES_QUERY = `
 export function useProjectRuntimes(envId: string, projectId: string) {
   return useQuery({
     queryKey: ['projectRuntimes', envId, projectId],
-    queryFn: () =>
-      gql<{ runtimes: { items: GqlRuntime[]; pageInfo: GqlPageInfo } }>(PROJECT_RUNTIMES_QUERY, { environmentId: envId, projectId })
-        .then((d) => d.runtimes.items),
+    queryFn: () => gql<{ runtimes: { items: GqlRuntime[]; pageInfo: GqlPageInfo } }>(PROJECT_RUNTIMES_QUERY, { environmentId: envId, projectId }).then((d) => d.runtimes.items),
     enabled: !!envId && !!projectId,
   });
 }
@@ -380,9 +368,7 @@ const RUNTIMES_PAGE_QUERY = `
 export function useRuntimesPage(envId: string, projectId: string, componentId: string | undefined, limit: number, offset: number) {
   return useQuery({
     queryKey: ['runtimes', 'page', envId, projectId, componentId, limit, offset],
-    queryFn: () =>
-      gql<{ runtimes: { items: GqlRuntime[]; pageInfo: GqlPageInfo } }>(RUNTIMES_PAGE_QUERY, { environmentId: envId, projectId, componentId, limit, offset })
-        .then((d) => d.runtimes),
+    queryFn: () => gql<{ runtimes: { items: GqlRuntime[]; pageInfo: GqlPageInfo } }>(RUNTIMES_PAGE_QUERY, { environmentId: envId, projectId, componentId, limit, offset }).then((d) => d.runtimes),
     enabled: !!envId && !!projectId,
   });
 }
@@ -401,9 +387,7 @@ const ORG_RUNTIMES_PAGE_QUERY = `
 export function useOrgRuntimesPage(envId: string, limit: number, offset: number) {
   return useQuery({
     queryKey: ['runtimes', 'page', envId, limit, offset],
-    queryFn: () =>
-      gql<{ runtimes: { items: GqlRuntime[]; pageInfo: GqlPageInfo } }>(ORG_RUNTIMES_PAGE_QUERY, { environmentId: envId, limit, offset })
-        .then((d) => d.runtimes),
+    queryFn: () => gql<{ runtimes: { items: GqlRuntime[]; pageInfo: GqlPageInfo } }>(ORG_RUNTIMES_PAGE_QUERY, { environmentId: envId, limit, offset }).then((d) => d.runtimes),
     enabled: !!envId,
   });
 }
@@ -601,10 +585,13 @@ export function useArtifacts(artifactType: string, envId: string, componentId: s
     queryKey: ['artifacts', artifactType, envId, componentId],
     queryFn: async () => {
       if (!mapping) return [];
-      const data = await gql<Record<string, { items: GqlArtifact[] }>>(`query ArtifactQuery($environmentId: String!, $componentId: String!) { ${mapping.field}(environmentId: $environmentId, componentId: $componentId) { items { ${mapping.gqlFields} } pageInfo { total, limit, offset } } }`, {
-        environmentId: envId,
-        componentId,
-      });
+      const data = await gql<Record<string, { items: GqlArtifact[] }>>(
+        `query ArtifactQuery($environmentId: String!, $componentId: String!) { ${mapping.field}(environmentId: $environmentId, componentId: $componentId) { items { ${mapping.gqlFields} } pageInfo { total, limit, offset } } }`,
+        {
+          environmentId: envId,
+          componentId,
+        },
+      );
       return data[mapping.field]?.items ?? [];
     },
     enabled: !!artifactType && !!envId && !!componentId && !!mapping && (options?.enabled ?? true),
@@ -620,14 +607,7 @@ export function useArtifacts(artifactType: string, envId: string, componentId: s
 
 // Paginated variant — used by the Supporting Artifacts panel. Passes limit/offset to the
 // backend so the GQL call carries real pagination params (not just client-side slicing).
-export function useArtifactPage(
-  artifactType: string,
-  envId: string,
-  componentId: string,
-  limit: number,
-  offset: number,
-  options?: { enabled?: boolean },
-) {
+export function useArtifactPage(artifactType: string, envId: string, componentId: string, limit: number, offset: number, options?: { enabled?: boolean }) {
   const mapping = ARTIFACT_QUERY_MAP[artifactType];
   return useQuery({
     queryKey: ['artifacts-page', artifactType, envId, componentId, limit, offset],

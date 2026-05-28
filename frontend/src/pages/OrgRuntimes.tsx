@@ -366,7 +366,15 @@ function EnvironmentRuntimeCard({
           </Stack>
           <Divider sx={{ mb: 2 }} />
           <Box sx={{ mb: 2, width: '100%', maxWidth: 400 }}>
-            <SearchField value={query} onChange={(v) => { setQuery(v); setPage(0); }} placeholder="Search runtimes..." fullWidth />
+            <SearchField
+              value={query}
+              onChange={(v) => {
+                setQuery(v);
+                setPage(0);
+              }}
+              placeholder="Search runtimes..."
+              fullWidth
+            />
           </Box>
           {isLoading ? (
             <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />

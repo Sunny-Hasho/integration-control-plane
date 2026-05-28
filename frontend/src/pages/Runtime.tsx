@@ -420,7 +420,15 @@ function EnvironmentRuntimeCard({
             </Stack>
           </Stack>
           <Divider sx={{ mb: 2 }} />
-          <SearchField value={query} onChange={(v) => { setQuery(v); setPage(0); }} placeholder="Search runtimes..." sx={{ mb: 2, width: '100%', maxWidth: 400 }} />
+          <SearchField
+            value={query}
+            onChange={(v) => {
+              setQuery(v);
+              setPage(0);
+            }}
+            placeholder="Search runtimes..."
+            sx={{ mb: 2, width: '100%', maxWidth: 400 }}
+          />
           {isLoading ? (
             <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />
           ) : filtered.length === 0 ? (
@@ -531,18 +539,18 @@ function EnvironmentRuntimeCard({
                 </ListingTable.Body>
               </ListingTable>
               <TablePagination
-                  sx={{ borderTop: '1px solid', borderColor: 'divider', mt: 1 }}
-                  component="div"
-                  count={total}
-                  page={page}
-                  onPageChange={(_, p) => setPage(p)}
-                  rowsPerPage={rowsPerPage}
-                  onRowsPerPageChange={(e) => {
-                    setRowsPerPage(parseInt(e.target.value, 10));
-                    setPage(0);
-                  }}
-                  rowsPerPageOptions={[5, 10, 25]}
-                />
+                sx={{ borderTop: '1px solid', borderColor: 'divider', mt: 1 }}
+                component="div"
+                count={total}
+                page={page}
+                onPageChange={(_, p) => setPage(p)}
+                rowsPerPage={rowsPerPage}
+                onRowsPerPageChange={(e) => {
+                  setRowsPerPage(parseInt(e.target.value, 10));
+                  setPage(0);
+                }}
+                rowsPerPageOptions={[5, 10, 25]}
+              />
             </>
           )}
         </CardContent>
@@ -661,7 +669,14 @@ export default function Runtime(scope: ProjectScope | ComponentScope): JSX.Eleme
       {viewingLogs && <LogFilesDrawer runtimeId={viewingLogs.runtimeId} onClose={() => setViewingLogs(null)} />}
 
       {deleting && (
-        <Dialog open onClose={() => { setDeleting(null); setDeletingEnvId(null); }} maxWidth="sm" fullWidth>
+        <Dialog
+          open
+          onClose={() => {
+            setDeleting(null);
+            setDeletingEnvId(null);
+          }}
+          maxWidth="sm"
+          fullWidth>
           <DialogTitle>Delete Runtime</DialogTitle>
           <DialogContent>
             <DialogContentText>
@@ -680,7 +695,13 @@ export default function Runtime(scope: ProjectScope | ComponentScope): JSX.Eleme
             )}
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => { setDeleting(null); setDeletingEnvId(null); }}>Cancel</Button>
+            <Button
+              onClick={() => {
+                setDeleting(null);
+                setDeletingEnvId(null);
+              }}>
+              Cancel
+            </Button>
             <Button variant="contained" color="error" disabled={deleteMutation.isPending} onClick={handleConfirmDelete}>
               Delete
             </Button>

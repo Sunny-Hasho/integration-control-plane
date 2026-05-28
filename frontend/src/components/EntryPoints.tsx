@@ -385,7 +385,21 @@ function EntryPointDetail({ selected, onOpenDrawerTab }: { selected: SelectedArt
   );
 }
 
-function EntryPointsList({ envId, componentId, projectId, componentType, isOnline, onOpenDrawer }: { envId: string; componentId: string; projectId: string; componentType: string; isOnline: boolean; onOpenDrawer: (a: GqlArtifact, type: string, envId: string, tab: string) => void }) {
+function EntryPointsList({
+  envId,
+  componentId,
+  projectId,
+  componentType,
+  isOnline,
+  onOpenDrawer,
+}: {
+  envId: string;
+  componentId: string;
+  projectId: string;
+  componentType: string;
+  isOnline: boolean;
+  onOpenDrawer: (a: GqlArtifact, type: string, envId: string, tab: string) => void;
+}) {
   const [selectedKey, setSelectedKey] = useState('');
   const navigate = useNavigate();
   const scope = useScope();

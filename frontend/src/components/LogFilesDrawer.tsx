@@ -102,7 +102,15 @@ export function LogFilesDrawer({ runtimeId, onClose }: LogFilesDrawerProps): JSX
       </Stack>
 
       <Box sx={{ p: 2 }}>
-        <SearchField value={searchQuery} onChange={(v) => { setSearchQuery(v); setPage(0); }} placeholder="Search log files..." sx={{ mb: 2, width: '100%' }} />
+        <SearchField
+          value={searchQuery}
+          onChange={(v) => {
+            setSearchQuery(v);
+            setPage(0);
+          }}
+          placeholder="Search log files..."
+          sx={{ mb: 2, width: '100%' }}
+        />
 
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           {total} log file{total !== 1 ? 's' : ''} found

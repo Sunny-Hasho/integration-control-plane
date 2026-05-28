@@ -99,11 +99,29 @@ function ListenerConfirmDialog({ open, action, listenerName, onConfirm, onCancel
 }
 
 function SelectedTypeArtifacts({
-  artifacts, artifactType, envId, componentId, query, onSelect,
-  serverTotal, page, rowsPerPage, onPageChange, onRowsPerPageChange,
+  artifacts,
+  artifactType,
+  envId,
+  componentId,
+  query,
+  onSelect,
+  serverTotal,
+  page,
+  rowsPerPage,
+  onPageChange,
+  onRowsPerPageChange,
 }: {
-  artifacts: GqlArtifact[]; artifactType: string; envId: string; componentId: string; query: string; onSelect: (a: GqlArtifact) => void;
-  serverTotal?: number; page: number; rowsPerPage: number; onPageChange: (p: number) => void; onRowsPerPageChange: (rpp: number) => void;
+  artifacts: GqlArtifact[];
+  artifactType: string;
+  envId: string;
+  componentId: string;
+  query: string;
+  onSelect: (a: GqlArtifact) => void;
+  serverTotal?: number;
+  page: number;
+  rowsPerPage: number;
+  onPageChange: (p: number) => void;
+  onRowsPerPageChange: (rpp: number) => void;
 }) {
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; artifact: GqlArtifact | null; action: 'START' | 'STOP' } | null>(null);
   const qc = useQueryClient();
@@ -352,11 +370,7 @@ export function ArtifactTypeSelector({ envId, componentId, onSelectArtifact }: {
   const isSearching = query.length > 0;
   // When searching, fetch all items (no limit/offset) so client-side filter works across all pages.
   // When not searching, use server-side pagination.
-  const { data: pagedResult, isLoading: loadingArtifacts } = useArtifactPage(
-    selectedArtifactType, envId, componentId,
-    isSearching ? 10000 : rowsPerPage,
-    isSearching ? 0 : page * rowsPerPage,
-  );
+  const { data: pagedResult, isLoading: loadingArtifacts } = useArtifactPage(selectedArtifactType, envId, componentId, isSearching ? 10000 : rowsPerPage, isSearching ? 0 : page * rowsPerPage);
 
   if (isLoading) return <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />;
   if (types.length === 0)
@@ -390,7 +404,16 @@ export function ArtifactTypeSelector({ envId, componentId, onSelectArtifact }: {
         <Typography variant="overline" sx={{ mb: 1, display: 'block' }}>
           {typePlural(selectedArtifactType)}
         </Typography>
-        <SearchField value={query} onChange={(v) => { setQuery(v); setPage(0); }} placeholder={`Search ${typePlural(selectedArtifactType)} by name`} fullWidth sx={{ mb: 2 }} />
+        <SearchField
+          value={query}
+          onChange={(v) => {
+            setQuery(v);
+            setPage(0);
+          }}
+          placeholder={`Search ${typePlural(selectedArtifactType)} by name`}
+          fullWidth
+          sx={{ mb: 2 }}
+        />
         {loadingArtifacts ? (
           <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />
         ) : (
@@ -405,7 +428,10 @@ export function ArtifactTypeSelector({ envId, componentId, onSelectArtifact }: {
             page={page}
             rowsPerPage={rowsPerPage}
             onPageChange={setPage}
-            onRowsPerPageChange={(rpp) => { setRowsPerPage(rpp); setPage(0); }}
+            onRowsPerPageChange={(rpp) => {
+              setRowsPerPage(rpp);
+              setPage(0);
+            }}
           />
         )}
       </Grid>
