@@ -39,9 +39,10 @@ isolated function buildPageResult(int total, types:PaginationInput? pagination) 
     if pagination?.'limit is () {
         return [0, total, {total, 'limit: total, offset: 0}];
     }
-    int effectiveLimit = int:min(pagination?.'limit ?: DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT);
-    int safeOffset = int:min(pagination?.offset ?: 0, total);
+    int effectiveLimit = int:max(0, int:min(pagination?.'limit ?: DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT));
+    int safeOffset = int:max(0, int:min(pagination?.offset ?: 0, total));
     int safeEnd = int:min(safeOffset + effectiveLimit, total);
+    log:printDebug("Building page result", total = total, 'limit = effectiveLimit, offset = safeOffset);
     return [safeOffset, safeEnd, {total, 'limit: effectiveLimit, offset: safeOffset}];
 }
 
@@ -734,6 +735,7 @@ service /graphql on graphqlListener {
         }
 
         [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(allRuntimes.length(), pagination);
+        log:printInfo("Fetching runtimes page", total = allRuntimes.length(), 'limit = pageInfo.'limit, offset = pageInfo.offset);
         return {items: allRuntimes.slice(sliceFrom, sliceTo), pageInfo};
     }
 
@@ -3595,8 +3597,13 @@ service /graphql on graphqlListener {
             userList = listField;
         }
 
+        // Paginate before enrichment to avoid N HTTP calls for all users when only a page is needed
+        int total = userList.length();
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(total, pagination);
+        json[] pageUsers = userList.slice(sliceFrom, sliceTo);
+
         types:MIUser[] enrichedUsers = [];
-        foreach json u in userList {
+        foreach json u in pageUsers {
             json|error userIdJson = u.userId;
             if userIdJson is error {
                 continue;
@@ -3630,8 +3637,7 @@ service /graphql on graphqlListener {
         }
 
         log:printDebug("Successfully fetched MI users from runtime", runtimeId = runtimeId, userCount = enrichedUsers.length());
-        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(enrichedUsers.length(), pagination);
-        return {items: enrichedUsers.slice(sliceFrom, sliceTo), pageInfo};
+        return {items: enrichedUsers, pageInfo};
     }
 
     isolated remote function addMIUser(graphql:Context context, string componentId, string runtimeId, string username, string password, boolean isAdmin = false, string domain = "primary") returns types:MIUserOperationResponse|error {

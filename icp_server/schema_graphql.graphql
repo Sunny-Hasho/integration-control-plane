@@ -811,7 +811,28 @@ type MgmtDataServiceOverview {
 }
 
 # ============================================
-# # Version & Timestamps
+# Component Type - Integration Component Details
+# ============================================
+type Component {
+  # Basic Identity Fields
+  id: String!
+  projectId: String!
+  orgHandler: String
+  orgId: Int
+
+  # Component Metadata
+  name: String!
+  handler: String!
+  displayName: String!
+  displayType: String
+  description: String
+  ownerName: String
+
+  # Status Fields
+  status: String!
+  initStatus: String
+
+  # Version & Timestamps
   version: String!
   createdAt: String!
   lastBuildDate: String

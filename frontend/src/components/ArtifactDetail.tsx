@@ -209,7 +209,7 @@ function SelectedTypeArtifacts({
       {
         onSettled: () => {
           // Invalidate and refetch the artifact list to sync with server
-          qc.invalidateQueries({ queryKey: ['artifacts', artifactType, envId, componentId] });
+          qc.invalidateQueries({ queryKey: ['artifacts-page', artifactType, envId, componentId] });
         },
       },
     );
@@ -228,7 +228,7 @@ function SelectedTypeArtifacts({
       {
         onSettled: () => {
           // Invalidate and refetch the artifact list to sync with server
-          qc.invalidateQueries({ queryKey: ['artifacts', artifactType, envId, componentId] });
+          qc.invalidateQueries({ queryKey: ['artifacts-page', artifactType, envId, componentId] });
         },
       },
     );

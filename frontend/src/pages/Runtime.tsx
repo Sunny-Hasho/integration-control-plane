@@ -322,22 +322,6 @@ function EnvironmentRuntimeCard({
   const [addOpen, setAddOpen] = useState(false);
   const { hasAnyPermission } = useAccessControl();
 
-  useEffect(() => {
-    if (!isLoading && serverTotal > 0 && runtimes.length === 0 && page > 0) {
-      setPage((p) => p - 1);
-    }
-  }, [runtimes.length, serverTotal, page, isLoading]);
-
-  useEffect(() => {
-    if (!autoOpenAddRuntime || !componentId) return;
-    if (!hasAnyPermission([Permissions.INTEGRATION_MANAGE], undefined, componentId)) return;
-    setAddOpen(true);
-    onAutoOpenConsumed?.();
-  }, [autoOpenAddRuntime, componentId, hasAnyPermission, onAutoOpenConsumed]);
-
-  // Sorting state: key = column, direction = 'asc' | 'desc'
-  const [sort, setSort] = useState<{ key: keyof GqlRuntime | 'component' | 'registrationTime' | 'lastHeartbeat'; direction: 'asc' | 'desc' }>({ key: 'runtimeName', direction: 'asc' });
-
   const filtered = runtimes.filter((r) => {
     if (!query) return true;
     const q = query.toLowerCase();
@@ -354,6 +338,22 @@ function EnvironmentRuntimeCard({
       (r.osVersion || '').toLowerCase().includes(q)
     );
   });
+
+  useEffect(() => {
+    if (!isLoading && serverTotal > 0 && filtered.length === 0 && page > 0) {
+      setPage((p) => p - 1);
+    }
+  }, [filtered.length, serverTotal, page, isLoading]);
+
+  useEffect(() => {
+    if (!autoOpenAddRuntime || !componentId) return;
+    if (!hasAnyPermission([Permissions.INTEGRATION_MANAGE], undefined, componentId)) return;
+    setAddOpen(true);
+    onAutoOpenConsumed?.();
+  }, [autoOpenAddRuntime, componentId, hasAnyPermission, onAutoOpenConsumed]);
+
+  // Sorting state: key = column, direction = 'asc' | 'desc'
+  const [sort, setSort] = useState<{ key: keyof GqlRuntime | 'component' | 'registrationTime' | 'lastHeartbeat'; direction: 'asc' | 'desc' }>({ key: 'runtimeName', direction: 'asc' });
 
   // Sorting logic
   const sorted = [...filtered].sort((a, b) => {

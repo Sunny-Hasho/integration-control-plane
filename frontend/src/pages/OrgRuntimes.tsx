@@ -279,19 +279,6 @@ function EnvironmentRuntimeCard({
   const runtimes = data?.items ?? [];
   const serverTotal = data?.pageInfo?.total ?? 0;
 
-  useEffect(() => {
-    if (!isLoading && serverTotal > 0 && runtimes.length === 0 && page > 0) {
-      setPage((p) => p - 1);
-    }
-  }, [runtimes.length, serverTotal, page, isLoading]);
-
-  useEffect(() => {
-    if (!autoOpenAddRuntime) return;
-    if (!hasAnyPermission([Permissions.ENVIRONMENT_MANAGE, Permissions.ENVIRONMENT_MANAGE_NONPROD])) return;
-    setAddOpen(true);
-    onAutoOpenConsumed?.();
-  }, [autoOpenAddRuntime, hasAnyPermission, onAutoOpenConsumed]);
-
   const filtered = runtimes.filter((r) => {
     if (!query) return true;
     const q = query.toLowerCase();
@@ -308,6 +295,19 @@ function EnvironmentRuntimeCard({
       (r.osVersion || '').toLowerCase().includes(q)
     );
   });
+
+  useEffect(() => {
+    if (!isLoading && serverTotal > 0 && filtered.length === 0 && page > 0) {
+      setPage((p) => p - 1);
+    }
+  }, [filtered.length, serverTotal, page, isLoading]);
+
+  useEffect(() => {
+    if (!autoOpenAddRuntime) return;
+    if (!hasAnyPermission([Permissions.ENVIRONMENT_MANAGE, Permissions.ENVIRONMENT_MANAGE_NONPROD])) return;
+    setAddOpen(true);
+    onAutoOpenConsumed?.();
+  }, [autoOpenAddRuntime, hasAnyPermission, onAutoOpenConsumed]);
 
   // Sorting logic
   const sorted = [...filtered].sort((a, b) => {

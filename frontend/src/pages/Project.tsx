@@ -184,7 +184,7 @@ function IntegrationsTable({ orgHandler, scope, projectId, onSelect }: { orgHand
           projectId={projectId}
           onClose={() => setDeleting(null)}
           onDeleted={() => {
-            if (page > 0 && page * rowsPerPage >= serverTotal - 1) setPage((p) => p - 1);
+            if (page > 0 && page * rowsPerPage >= total - 1) setPage((p) => p - 1);
           }}
         />
       )}

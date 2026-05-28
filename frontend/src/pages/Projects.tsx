@@ -168,7 +168,7 @@ export default function Projects(scope: OrgScope): JSX.Element {
       {
         onSuccess: (result) => {
           if (result.status === 'success') {
-            if (page > 0 && page * rowsPerPage >= serverTotal - 1) setPage((p) => p - 1);
+            if (page > 0 && page * rowsPerPage >= total - 1) setPage((p) => p - 1);
             setDeleteDialogOpen(false);
             setProjectToDelete(null);
             setConfirmText('');
