@@ -49,7 +49,7 @@ import { useCallback, useEffect, useState, type JSX } from 'react';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router';
 import { gql } from '../api/graphql';
-import { useProjectByHandler, useEnvironments, useComponentByHandler, useComponentSecrets, RUNTIMES_QUERY, PROJECT_RUNTIMES_QUERY, COMPONENT_SECRETS_QUERY, type GqlRuntime, type GqlBoundSecret } from '../api/queries';
+import { useProjectByHandler, useEnvironments, useComponentByHandler, useComponentSecrets, useRuntimesPage, COMPONENT_SECRETS_QUERY, type GqlRuntime, type GqlBoundSecret } from '../api/queries';
 import { useCreateOrgSecret, useDeleteRuntime, useRevokeOrgSecret } from '../api/mutations';
 import { hasComponent, type ProjectScope, type ComponentScope } from '../nav';
 import { formatDistanceToNow } from '../utils/time';
@@ -294,11 +294,9 @@ function EnvironmentRuntimeCard({
   componentType,
   projectHandle,
   integrationHandle,
-  runtimes,
+  projectId,
   onDelete,
   onViewLogs,
-  onRefresh,
-  isRefreshing,
   autoOpenAddRuntime,
   onAutoOpenConsumed,
 }: {
@@ -308,30 +306,21 @@ function EnvironmentRuntimeCard({
   componentType?: string;
   projectHandle: string;
   integrationHandle: string;
-  runtimes: GqlRuntime[];
-  onDelete: (runtime: GqlRuntime) => void;
+  projectId: string;
+  onDelete: (runtime: GqlRuntime, envId: string) => void;
   onViewLogs: (runtime: GqlRuntime) => void;
-  onRefresh: () => void;
-  isRefreshing?: boolean;
   autoOpenAddRuntime?: boolean;
   onAutoOpenConsumed?: () => void;
 }) {
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(5);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const { data, isLoading, isFetching: isRefreshing, refetch } = useRuntimesPage(environmentId, projectId, componentId, query ? 500 : rowsPerPage, query ? 0 : page * rowsPerPage);
+  const runtimes = data?.items ?? [];
+  const serverTotal = data?.pageInfo?.total ?? 0;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const { hasAnyPermission } = useAccessControl();
-
-  useEffect(() => {
-    if (!autoOpenAddRuntime || !componentId) return;
-    if (!hasAnyPermission([Permissions.INTEGRATION_MANAGE], undefined, componentId)) return;
-    setAddOpen(true);
-    onAutoOpenConsumed?.();
-  }, [autoOpenAddRuntime, componentId, hasAnyPermission, onAutoOpenConsumed]);
-
-  // Sorting state: key = column, direction = 'asc' | 'desc'
-  const [sort, setSort] = useState<{ key: keyof GqlRuntime | 'component' | 'registrationTime' | 'lastHeartbeat'; direction: 'asc' | 'desc' }>({ key: 'runtimeName', direction: 'asc' });
 
   const filtered = runtimes.filter((r) => {
     if (!query) return true;
@@ -349,6 +338,22 @@ function EnvironmentRuntimeCard({
       (r.osVersion || '').toLowerCase().includes(q)
     );
   });
+
+  useEffect(() => {
+    if (!isLoading && serverTotal > 0 && filtered.length === 0 && page > 0) {
+      setPage((p) => p - 1);
+    }
+  }, [filtered.length, serverTotal, page, isLoading]);
+
+  useEffect(() => {
+    if (!autoOpenAddRuntime || !componentId) return;
+    if (!hasAnyPermission([Permissions.INTEGRATION_MANAGE], undefined, componentId)) return;
+    setAddOpen(true);
+    onAutoOpenConsumed?.();
+  }, [autoOpenAddRuntime, componentId, hasAnyPermission, onAutoOpenConsumed]);
+
+  // Sorting state: key = column, direction = 'asc' | 'desc'
+  const [sort, setSort] = useState<{ key: keyof GqlRuntime | 'component' | 'registrationTime' | 'lastHeartbeat'; direction: 'asc' | 'desc' }>({ key: 'runtimeName', direction: 'asc' });
 
   // Sorting logic
   const sorted = [...filtered].sort((a, b) => {
@@ -382,9 +387,8 @@ function EnvironmentRuntimeCard({
     return direction === 'asc' ? cmp : -cmp;
   });
 
-  const maxPage = Math.max(0, Math.ceil(sorted.length / rowsPerPage) - 1);
-  const safePage = Math.min(page, maxPage);
-  const paged = sorted.slice(safePage * rowsPerPage, safePage * rowsPerPage + rowsPerPage);
+  const paged = query ? sorted.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage) : sorted;
+  const total = query ? filtered.length : serverTotal;
 
   return (
     <>
@@ -395,7 +399,7 @@ function EnvironmentRuntimeCard({
               <Typography variant="h5" component="h2" sx={{ fontWeight: 600, textTransform: 'capitalize' }}>
                 {environmentName}
               </Typography>
-              <Chip label={`${filtered.length} runtime${filtered.length !== 1 ? 's' : ''}`} size="small" color={filtered.length > 0 ? 'primary' : 'default'} />
+              <Chip label={`${total} runtime${total !== 1 ? 's' : ''}`} size="small" color={total > 0 ? 'primary' : 'default'} />
             </Stack>
             <Stack direction="row" gap={1} alignItems="center">
               {componentId && (
@@ -410,14 +414,24 @@ function EnvironmentRuntimeCard({
                   </Stack>
                 </Authorized>
               )}
-              <IconButton size="small" aria-label={`Refresh runtimes for ${environmentName}`} onClick={onRefresh} disabled={isRefreshing}>
+              <IconButton size="small" aria-label={`Refresh runtimes for ${environmentName}`} onClick={() => refetch()} disabled={isRefreshing}>
                 <RefreshCw size={16} />
               </IconButton>
             </Stack>
           </Stack>
           <Divider sx={{ mb: 2 }} />
-          <SearchField value={query} onChange={setQuery} placeholder="Search runtimes..." sx={{ mb: 2, width: '100%', maxWidth: 400 }} />
-          {filtered.length === 0 ? (
+          <SearchField
+            value={query}
+            onChange={(v) => {
+              setQuery(v);
+              setPage(0);
+            }}
+            placeholder="Search runtimes..."
+            sx={{ mb: 2, width: '100%', maxWidth: 400 }}
+          />
+          {isLoading ? (
+            <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />
+          ) : filtered.length === 0 ? (
             <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
               {query ? 'No runtimes match your search.' : 'No runtimes registered for this environment.'}
             </Typography>
@@ -515,7 +529,7 @@ function EnvironmentRuntimeCard({
                               <FileText size={16} />
                             </IconButton>
                           )}
-                          <IconButton size="small" color="error" aria-label={`Delete runtime ${r.runtimeId}`} disabled={r.status === 'RUNNING'} onClick={() => onDelete(r)}>
+                          <IconButton size="small" color="error" aria-label={`Delete runtime ${r.runtimeId}`} disabled={r.status === 'RUNNING'} onClick={() => onDelete(r, environmentId)}>
                             <Trash2 size={16} />
                           </IconButton>
                         </Stack>
@@ -524,21 +538,19 @@ function EnvironmentRuntimeCard({
                   ))}
                 </ListingTable.Body>
               </ListingTable>
-              {filtered.length > rowsPerPage && (
-                <TablePagination
-                  sx={{ borderTop: '1px solid', borderColor: 'divider', mt: 1 }}
-                  component="div"
-                  count={filtered.length}
-                  page={safePage}
-                  onPageChange={(_, p) => setPage(p)}
-                  rowsPerPage={rowsPerPage}
-                  onRowsPerPageChange={(e) => {
-                    setRowsPerPage(parseInt(e.target.value, 10));
-                    setPage(0);
-                  }}
-                  rowsPerPageOptions={[5, 10, 25]}
-                />
-              )}
+              <TablePagination
+                sx={{ borderTop: '1px solid', borderColor: 'divider', mt: 1 }}
+                component="div"
+                count={total}
+                page={page}
+                onPageChange={(_, p) => setPage(p)}
+                rowsPerPage={rowsPerPage}
+                onRowsPerPageChange={(e) => {
+                  setRowsPerPage(parseInt(e.target.value, 10));
+                  setPage(0);
+                }}
+                rowsPerPageOptions={[5, 10, 25]}
+              />
             </>
           )}
         </CardContent>
@@ -571,6 +583,7 @@ export default function Runtime(scope: ProjectScope | ComponentScope): JSX.Eleme
   const { data: environments = [] } = useEnvironments(projectId);
 
   const [deleting, setDeleting] = useState<GqlRuntime | null>(null);
+  const [deletingEnvId, setDeletingEnvId] = useState<string | null>(null);
   const [alsoRevoke, setAlsoRevoke] = useState(false);
   const [viewingLogs, setViewingLogs] = useState<GqlRuntime | null>(null);
   const deleteMutation = useDeleteRuntime();
@@ -592,30 +605,21 @@ export default function Runtime(scope: ProjectScope | ComponentScope): JSX.Eleme
     );
   }, [location.pathname, location.search, navigate, shouldAutoOpenAddRuntime]);
 
-  const runtimeQueries = useQueries({
-    queries: environments.map((env) => ({
-      queryKey: componentId ? ['runtimes', env.id, projectId, componentId] : ['runtimes', env.id, projectId],
-      queryFn: () => gql<{ runtimes: GqlRuntime[] }>(componentId ? RUNTIMES_QUERY : PROJECT_RUNTIMES_QUERY, componentId ? { environmentId: env.id, projectId, componentId } : { environmentId: env.id, projectId }).then((d) => d.runtimes),
-      enabled: hasComponent(scope) ? componentId !== undefined : true,
-    })),
-  });
-
   const secretQueries = useQueries({
     queries: environments.map((env) => ({
       queryKey: ['componentSecrets', componentId ?? '', env.id],
-      queryFn: () => gql<{ componentSecrets: GqlBoundSecret[] }>(COMPONENT_SECRETS_QUERY, { componentId, environmentId: env.id }).then((d) => d.componentSecrets),
+      queryFn: () => gql<{ componentSecrets: { items: GqlBoundSecret[] } }>(COMPONENT_SECRETS_QUERY, { componentId, environmentId: env.id }).then((d) => d.componentSecrets.items),
       enabled: !!componentId,
     })),
   });
 
-  const isLoading = runtimeQueries.some((q) => q.isLoading);
-
-  const deletingEnvIndex = deleting ? environments.findIndex((_, i) => runtimeQueries[i]?.data?.some((r) => r.runtimeId === deleting.runtimeId)) : -1;
+  const deletingEnvIndex = deletingEnvId ? environments.findIndex((e) => e.id === deletingEnvId) : -1;
   const deletingEnvSecrets = deletingEnvIndex >= 0 ? (secretQueries[deletingEnvIndex]?.data ?? []) : [];
   const orphanedKeyId = deleting ? isSoleUser(deletingEnvSecrets, deleting.runtimeId) : null;
 
-  const handleStartDelete = (r: GqlRuntime) => {
+  const handleStartDelete = (r: GqlRuntime, envId: string) => {
     setDeleting(r);
+    setDeletingEnvId(envId);
     setAlsoRevoke(false);
   };
 
@@ -626,6 +630,7 @@ export default function Runtime(scope: ProjectScope | ComponentScope): JSX.Eleme
       {
         onSuccess: () => {
           setDeleting(null);
+          setDeletingEnvId(null);
           setAlsoRevoke(false);
         },
       },
@@ -638,45 +643,40 @@ export default function Runtime(scope: ProjectScope | ComponentScope): JSX.Eleme
         <PageTitle.Header>Runtime</PageTitle.Header>
       </PageTitle>
 
-      {isLoading ? (
-        <CircularProgress sx={{ display: 'block', mx: 'auto', py: 8 }} />
+      {environments.length === 0 ? (
+        <Typography color="text.secondary" sx={{ py: 8, textAlign: 'center' }}>
+          No environments found. Create an environment to register runtimes.
+        </Typography>
       ) : (
-        <>
-          {environments.length === 0 ? (
-            <Typography color="text.secondary" sx={{ py: 8, textAlign: 'center' }}>
-              No environments found. Create an environment to register runtimes.
-            </Typography>
-          ) : (
-            environments.map((env, index) => {
-              const query = runtimeQueries[index];
-              const runtimes = runtimeQueries[index]?.data ?? [];
-              return (
-                <EnvironmentRuntimeCard
-                  key={env.id}
-                  environmentName={env.handler}
-                  environmentId={env.id}
-                  componentId={componentId}
-                  componentType={component?.componentType}
-                  projectHandle={projectHandle}
-                  integrationHandle={integrationHandle}
-                  runtimes={runtimes}
-                  onDelete={handleStartDelete}
-                  onViewLogs={setViewingLogs}
-                  onRefresh={() => query?.refetch()}
-                  isRefreshing={query?.isFetching}
-                  autoOpenAddRuntime={shouldAutoOpenAddRuntime && (autoOpenEnvironmentId ? env.id === autoOpenEnvironmentId : index === 0)}
-                  onAutoOpenConsumed={clearAutoOpenAction}
-                />
-              );
-            })
-          )}
-        </>
+        environments.map((env, index) => (
+          <EnvironmentRuntimeCard
+            key={env.id}
+            environmentName={env.handler}
+            environmentId={env.id}
+            componentId={componentId}
+            componentType={component?.componentType}
+            projectHandle={projectHandle}
+            integrationHandle={integrationHandle}
+            projectId={projectId}
+            onDelete={handleStartDelete}
+            onViewLogs={setViewingLogs}
+            autoOpenAddRuntime={shouldAutoOpenAddRuntime && (autoOpenEnvironmentId ? env.id === autoOpenEnvironmentId : index === 0)}
+            onAutoOpenConsumed={clearAutoOpenAction}
+          />
+        ))
       )}
 
       {viewingLogs && <LogFilesDrawer runtimeId={viewingLogs.runtimeId} onClose={() => setViewingLogs(null)} />}
 
       {deleting && (
-        <Dialog open onClose={() => setDeleting(null)} maxWidth="sm" fullWidth>
+        <Dialog
+          open
+          onClose={() => {
+            setDeleting(null);
+            setDeletingEnvId(null);
+          }}
+          maxWidth="sm"
+          fullWidth>
           <DialogTitle>Delete Runtime</DialogTitle>
           <DialogContent>
             <DialogContentText>
@@ -695,7 +695,13 @@ export default function Runtime(scope: ProjectScope | ComponentScope): JSX.Eleme
             )}
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setDeleting(null)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                setDeleting(null);
+                setDeletingEnvId(null);
+              }}>
+              Cancel
+            </Button>
             <Button variant="contained" color="error" disabled={deleteMutation.isPending} onClick={handleConfirmDelete}>
               Delete
             </Button>

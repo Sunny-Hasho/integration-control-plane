@@ -128,6 +128,143 @@ public type LogFile record {
 public type LogFilesResponse record {
     int count;
     LogFile[] files;
+    PageInfo pageInfo;
+};
+
+public type PageInfo record {
+    int total;
+    int 'limit;
+    int offset;
+};
+
+public type ComponentsPage record {
+    Component[] items;
+    PageInfo pageInfo;
+};
+
+public type RuntimesPage record {
+    Runtime[] items;
+    PageInfo pageInfo;
+};
+
+public type ProjectsPage record {
+    Project[] items;
+    PageInfo pageInfo;
+};
+
+public type OrgSecretsPage record {
+    OrgSecretListEntry[] items;
+    PageInfo pageInfo;
+};
+
+public type ServicesPage record {
+    Service[] items;
+    PageInfo pageInfo;
+};
+
+public type ListenersPage record {
+    Listener[] items;
+    PageInfo pageInfo;
+};
+
+public type RestApisPage record {
+    RestApi[] items;
+    PageInfo pageInfo;
+};
+
+public type ProxyServicesPage record {
+    ProxyService[] items;
+    PageInfo pageInfo;
+};
+
+public type EndpointsPage record {
+    Endpoint[] items;
+    PageInfo pageInfo;
+};
+
+public type InboundEndpointsPage record {
+    InboundEndpoint[] items;
+    PageInfo pageInfo;
+};
+
+public type SequencesPage record {
+    Sequence[] items;
+    PageInfo pageInfo;
+};
+
+public type TasksPage record {
+    Task[] items;
+    PageInfo pageInfo;
+};
+
+public type TemplatesPage record {
+    Template[] items;
+    PageInfo pageInfo;
+};
+
+public type MessageStoresPage record {
+    MessageStore[] items;
+    PageInfo pageInfo;
+};
+
+public type MessageProcessorsPage record {
+    MessageProcessor[] items;
+    PageInfo pageInfo;
+};
+
+public type LocalEntriesPage record {
+    LocalEntry[] items;
+    PageInfo pageInfo;
+};
+
+public type DataServicesPage record {
+    DataService[] items;
+    PageInfo pageInfo;
+};
+
+public type DataSourcesPage record {
+    DataSource[] items;
+    PageInfo pageInfo;
+};
+
+public type CompositeAppsPage record {
+    CompositeApp[] items;
+    PageInfo pageInfo;
+};
+
+public type ConnectorsPage record {
+    Connector[] items;
+    PageInfo pageInfo;
+};
+
+public type RegistryResourcesPage record {
+    RegistryResource[] items;
+    PageInfo pageInfo;
+};
+
+public type LoggerGroupsPage record {
+    LoggerGroup[] items;
+    PageInfo pageInfo;
+};
+
+public type AutomationsPage record {
+    Automation[] items;
+    PageInfo pageInfo;
+};
+
+public type LoggersPage record {
+    Logger[] items;
+    PageInfo pageInfo;
+};
+
+public type BoundSecretsPage record {
+    BoundSecretEntry[] items;
+    PageInfo pageInfo;
+};
+
+public type EnvironmentsPage record {
+    Environment[] items;
+    PageInfo pageInfo;
 };
 
 public type Main record {
@@ -2418,10 +2555,15 @@ public type MIUsersResponse record {|
     MIUser[] users;
 |};
 
-public type MIUserOperationResponse record {|
+public type MIUsersPage record {
+    MIUser[] items;
+    PageInfo pageInfo;
+};
+
+public type MIUserOperationResponse record {
     string username;
     string status;
-|};
+};
 
 public type ValidatedRuntime record {|
     string runtimeId;

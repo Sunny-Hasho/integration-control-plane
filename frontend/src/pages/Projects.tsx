@@ -43,7 +43,7 @@ import { Clock, Folder, LayoutGrid, List, Pencil, Plus, RefreshCw, Trash2 } from
 import SearchField from '../components/SearchField';
 import { useNavigate } from 'react-router';
 import { useState, type JSX } from 'react';
-import { useProjects, type GqlProject } from '../api/queries';
+import { useProjectsPage, type GqlProject } from '../api/queries';
 import { useDeleteProject } from '../api/mutations';
 import EmptyListing from '../components/EmptyListing';
 import { formatDistanceToNow } from '../utils/time';
@@ -148,7 +148,9 @@ export default function Projects(scope: OrgScope): JSX.Element {
   const [confirmText, setConfirmText] = useState('');
   const { hasOrgPermission } = useAccessControl();
   const canCreateProject = hasOrgPermission(Permissions.PROJECT_MANAGE);
-  const { data: projects, isLoading, refetch } = useProjects();
+  const { data, isLoading, refetch } = useProjectsPage(query ? 500 : rowsPerPage, query ? 0 : page * rowsPerPage);
+  const projects = data?.items ?? [];
+  const serverTotal = data?.pageInfo?.total ?? 0;
   const deleteMutation = useDeleteProject();
 
   const handleDeleteClick = (project: GqlProject) => {
@@ -166,6 +168,7 @@ export default function Projects(scope: OrgScope): JSX.Element {
       {
         onSuccess: (result) => {
           if (result.status === 'success') {
+            if (page > 0 && page * rowsPerPage >= total - 1) setPage((p) => p - 1);
             setDeleteDialogOpen(false);
             setProjectToDelete(null);
             setConfirmText('');
@@ -188,14 +191,13 @@ export default function Projects(scope: OrgScope): JSX.Element {
     setConfirmText('');
   };
 
-  const filtered = (projects ?? []).filter((p) => {
+  const filtered = projects.filter((p) => {
     if (!query) return true;
     const searchQuery = query.trim().toLowerCase();
     return p.name.toLowerCase().includes(searchQuery) || p.description?.toLowerCase().includes(searchQuery) || p.handler.toLowerCase().includes(searchQuery) || p.region?.toLowerCase().includes(searchQuery) || p.type?.toLowerCase().includes(searchQuery);
   });
-  const maxPage = Math.max(0, Math.ceil(filtered.length / rowsPerPage) - 1);
-  const safePage = Math.min(page, maxPage);
-  const paginated = filtered.slice(safePage * rowsPerPage, safePage * rowsPerPage + rowsPerPage);
+  const displayItems = query ? filtered.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage) : filtered;
+  const total = query ? filtered.length : serverTotal;
 
   return (
     <PageContent>
@@ -221,7 +223,15 @@ export default function Projects(scope: OrgScope): JSX.Element {
       </PageTitle>
 
       <Stack direction="row" gap={2} alignItems="center" sx={{ mb: 3 }}>
-        <SearchField value={query} onChange={setQuery} placeholder="Search projects" fullWidth />
+        <SearchField
+          value={query}
+          onChange={(v) => {
+            setQuery(v);
+            setPage(0);
+          }}
+          placeholder="Search projects"
+          fullWidth
+        />
         <Authorized permissions={Permissions.PROJECT_MANAGE}>
           <Button variant="contained" startIcon={<Plus size={20} />} onClick={() => navigate(newProjectUrl(scope))} sx={{ whiteSpace: 'nowrap' }}>
             Create Project
@@ -231,20 +241,22 @@ export default function Projects(scope: OrgScope): JSX.Element {
 
       {isLoading ? (
         <CircularProgress sx={{ display: 'block', mx: 'auto', py: 8 }} />
-      ) : filtered.length === 0 ? (
+      ) : total === 0 && !query ? (
         <EmptyListing
           icon={<Folder size={48} />}
           title="No projects found"
-          description={query ? 'Try adjusting your search' : canCreateProject ? 'Add your runtime or create a project to get started.' : 'Ask your administrator for access'}
-          showAction={!query && canCreateProject}
+          description={canCreateProject ? 'Add your runtime or create a project to get started.' : 'Ask your administrator for access'}
+          showAction={canCreateProject}
           actionLabel="Add Runtime"
           onAction={() => navigate(`${resourceUrl(scope, 'runtimes')}?action=add-runtime`)}
         />
+      ) : filtered.length === 0 ? (
+        <EmptyListing icon={<Folder size={48} />} title="No projects match your search" description="Try adjusting your search terms" showAction={false} />
       ) : (
         <>
           {view === 'grid' ? (
             <Grid container spacing={2}>
-              {paginated.map((p) => (
+              {displayItems.map((p) => (
                 <Grid key={p.id} size={{ xs: 12, sm: 6, md: 4 }}>
                   <ProjectCard project={p} onClick={() => navigate(resourceUrl(narrow(scope, p.handler), 'overview'))} onSettings={() => navigate(editProjectUrl(scope.org, p.id))} onDelete={() => handleDeleteClick(p)} />
                 </Grid>
@@ -252,26 +264,24 @@ export default function Projects(scope: OrgScope): JSX.Element {
             </Grid>
           ) : (
             <Stack spacing={1.5}>
-              {paginated.map((p) => (
+              {displayItems.map((p) => (
                 <ProjectListItem key={p.id} project={p} onClick={() => navigate(resourceUrl(narrow(scope, p.handler), 'overview'))} onSettings={() => navigate(editProjectUrl(scope.org, p.id))} onDelete={() => handleDeleteClick(p)} />
               ))}
             </Stack>
           )}
-          {filtered.length > rowsPerPage && (
-            <TablePagination
-              component="div"
-              count={filtered.length}
-              page={safePage}
-              onPageChange={(_, p) => setPage(p)}
-              rowsPerPage={rowsPerPage}
-              onRowsPerPageChange={(e) => {
-                setRowsPerPage(parseInt(e.target.value, 10));
-                setPage(0);
-              }}
-              rowsPerPageOptions={[10, 20, 50]}
-              sx={{ mt: 2 }}
-            />
-          )}
+          <TablePagination
+            component="div"
+            count={total}
+            page={page}
+            onPageChange={(_, p) => setPage(p)}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={(e) => {
+              setRowsPerPage(parseInt(e.target.value, 10));
+              setPage(0);
+            }}
+            rowsPerPageOptions={[5, 10, 20, 50]}
+            sx={{ mt: 2 }}
+          />
         </>
       )}
 

@@ -1,6 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { gql } from './graphql';
 
+export interface GqlPageInfo {
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface GqlProject {
   id: string;
   orgId: number;
@@ -32,10 +38,18 @@ export interface GqlComponent {
 
 const PROJECTS_QUERY = `{
   projects(orgId: 1) {
-    id, orgId, name, handler, description, version,
-    createdDate, updatedAt, region, type
+    items { id, orgId, name, handler, description, version, createdDate, updatedAt, region, type }
+    pageInfo { total, limit, offset }
   }
 }`;
+
+const PROJECTS_PAGE_QUERY = `
+  query GetProjectsPage($limit: Int!, $offset: Int!) {
+    projects(orgId: 1, pagination: { limit: $limit, offset: $offset }) {
+      items { id, orgId, name, handler, description, version, createdDate, updatedAt, region, type }
+      pageInfo { total, limit, offset }
+    }
+  }`;
 
 const PROJECT_QUERY = `
   query GetProject($projectId: String!) {
@@ -56,16 +70,34 @@ const PROJECT_BY_HANDLER_QUERY = `
 const COMPONENTS_QUERY = `
   query GetComponents($orgHandler: String!, $projectId: String!) {
     components(orgHandler: $orgHandler, projectId: $projectId) {
-      projectId, id, name, handler, displayName, displayType,
-      description, status, componentType, componentSubType,
-      version, createdAt, lastBuildDate
+      items { projectId, id, name, handler, displayName, displayType,
+              description, status, componentType, componentSubType,
+              version, createdAt, lastBuildDate }
+      pageInfo { total, limit, offset }
+    }
+  }`;
+
+const COMPONENTS_PAGE_QUERY = `
+  query GetComponentsPage($orgHandler: String!, $projectId: String!, $limit: Int!, $offset: Int!) {
+    components(orgHandler: $orgHandler, projectId: $projectId, options: { pagination: { limit: $limit, offset: $offset } }) {
+      items { projectId, id, name, handler, displayName, displayType,
+              description, status, componentType, componentSubType,
+              version, createdAt, lastBuildDate }
+      pageInfo { total, limit, offset }
     }
   }`;
 
 export function useProjects() {
   return useQuery({
     queryKey: ['projects'],
-    queryFn: () => gql<{ projects: GqlProject[] }>(PROJECTS_QUERY).then((d) => d.projects),
+    queryFn: () => gql<{ projects: { items: GqlProject[]; pageInfo: GqlPageInfo } }>(PROJECTS_QUERY).then((d) => d.projects.items),
+  });
+}
+
+export function useProjectsPage(limit: number, offset: number) {
+  return useQuery({
+    queryKey: ['projects', 'page', limit, offset],
+    queryFn: () => gql<{ projects: { items: GqlProject[]; pageInfo: GqlPageInfo } }>(PROJECTS_PAGE_QUERY, { limit, offset }).then((d) => d.projects),
   });
 }
 
@@ -139,7 +171,15 @@ export function useEnvironmentHandlerAvailability(handler: string) {
 export function useComponents(orgHandler: string, projectId: string) {
   return useQuery({
     queryKey: ['components', orgHandler, projectId],
-    queryFn: () => gql<{ components: GqlComponent[] }>(COMPONENTS_QUERY, { orgHandler, projectId }).then((d) => d.components),
+    queryFn: () => gql<{ components: { items: GqlComponent[]; pageInfo: GqlPageInfo } }>(COMPONENTS_QUERY, { orgHandler, projectId }).then((d) => d.components.items),
+    enabled: !!orgHandler && !!projectId,
+  });
+}
+
+export function useComponentsPage(orgHandler: string, projectId: string, limit: number, offset: number) {
+  return useQuery({
+    queryKey: ['components', 'page', orgHandler, projectId, limit, offset],
+    queryFn: () => gql<{ components: { items: GqlComponent[]; pageInfo: GqlPageInfo } }>(COMPONENTS_PAGE_QUERY, { orgHandler, projectId, limit, offset }).then((d) => d.components),
     enabled: !!orgHandler && !!projectId,
   });
 }
@@ -177,26 +217,27 @@ export interface GqlEnvironment {
 const ENVIRONMENTS_QUERY = `
   query GetEnvironments($projectId: String!) {
     environments(orgUuid: "default-org-uuid", type: "external", projectId: $projectId) {
-      id, name, handler, critical
+      items { id, name, handler, critical }
+      pageInfo { total, limit, offset }
     }
   }`;
 
 export function useEnvironments(projectId: string) {
   return useQuery({
     queryKey: ['environments', projectId],
-    queryFn: () => gql<{ environments: GqlEnvironment[] }>(ENVIRONMENTS_QUERY, { projectId }).then((d) => d.environments),
+    queryFn: () => gql<{ environments: { items: GqlEnvironment[]; pageInfo: GqlPageInfo } }>(ENVIRONMENTS_QUERY, { projectId }).then((d) => d.environments.items),
     enabled: !!projectId,
   });
 }
 
 const ALL_ENVIRONMENTS_QUERY = `{
-  environments { id, name, handler, description, critical, createdAt }
+  environments { items { id, name, handler, description, critical, createdAt } pageInfo { total, limit, offset } }
 }`;
 
 export function useAllEnvironments() {
   return useQuery({
     queryKey: ['environments'],
-    queryFn: () => gql<{ environments: GqlEnvironment[] }>(ALL_ENVIRONMENTS_QUERY).then((d) => d.environments),
+    queryFn: () => gql<{ environments: { items: GqlEnvironment[]; pageInfo: GqlPageInfo } }>(ALL_ENVIRONMENTS_QUERY).then((d) => d.environments.items),
   });
 }
 
@@ -211,14 +252,15 @@ export interface GqlLogger {
 const LOGGERS_BY_ENV_AND_COMPONENT_QUERY = `
   query GetLoggers($environmentId: String!, $componentId: String!) {
     loggersByEnvironmentAndComponent(environmentId: $environmentId, componentId: $componentId) {
-      loggerName, componentName, logLevel, logLevelInSync, runtimeIds
+      items { loggerName, componentName, logLevel, logLevelInSync, runtimeIds }
+      pageInfo { total, limit, offset }
     }
   }`;
 
 export function useLoggers(environmentId: string, componentId: string) {
   return useQuery({
     queryKey: ['loggers', environmentId, componentId],
-    queryFn: () => gql<{ loggersByEnvironmentAndComponent: GqlLogger[] }>(LOGGERS_BY_ENV_AND_COMPONENT_QUERY, { environmentId, componentId }).then((d) => d.loggersByEnvironmentAndComponent),
+    queryFn: () => gql<{ loggersByEnvironmentAndComponent: { items: GqlLogger[]; pageInfo: GqlPageInfo } }>(LOGGERS_BY_ENV_AND_COMPONENT_QUERY, { environmentId, componentId }).then((d) => d.loggersByEnvironmentAndComponent.items),
     enabled: !!environmentId && !!componentId,
     refetchInterval: (query) => {
       const loggers = query.state.data;
@@ -247,16 +289,17 @@ export interface GqlRuntime {
 const RUNTIMES_QUERY = `
   query GetRuntimes($environmentId: String!, $projectId: String!, $componentId: String!) {
     runtimes(environmentId: $environmentId, projectId: $projectId, componentId: $componentId) {
-      runtimeId, runtimeName, runtimeType, status, version,
-      platformName, platformVersion, platformHome,
-      osName, osVersion, registrationTime, lastHeartbeat
+      items { runtimeId, runtimeName, runtimeType, status, version,
+              platformName, platformVersion, platformHome,
+              osName, osVersion, registrationTime, lastHeartbeat }
+      pageInfo { total, limit, offset }
     }
   }`;
 
 export function useRuntimes(envId: string, projectId: string, componentId: string) {
   return useQuery({
     queryKey: ['runtimes', envId, projectId, componentId],
-    queryFn: () => gql<{ runtimes: GqlRuntime[] }>(RUNTIMES_QUERY, { environmentId: envId, projectId, componentId }).then((d) => d.runtimes),
+    queryFn: () => gql<{ runtimes: { items: GqlRuntime[]; pageInfo: GqlPageInfo } }>(RUNTIMES_QUERY, { environmentId: envId, projectId, componentId }).then((d) => d.runtimes.items),
     enabled: !!envId && !!projectId && !!componentId,
   });
 }
@@ -264,16 +307,17 @@ export function useRuntimes(envId: string, projectId: string, componentId: strin
 const COMPONENT_RUNTIMES_QUERY = `
   query GetComponentRuntimes($environmentId: String!, $projectId: String!, $componentId: String!) {
     runtimes(environmentId: $environmentId, projectId: $projectId, componentId: $componentId) {
-      runtimeId, runtimeName, runtimeType, status, version,
-      platformName, platformVersion, platformHome,
-      osName, osVersion, registrationTime, lastHeartbeat
+      items { runtimeId, runtimeName, runtimeType, status, version,
+              platformName, platformVersion, platformHome,
+              osName, osVersion, registrationTime, lastHeartbeat }
+      pageInfo { total, limit, offset }
     }
   }`;
 
 export function useComponentRuntimes(envId: string, projectId: string, componentId: string, enabled = true) {
   return useQuery({
     queryKey: ['componentRuntimes', envId, projectId, componentId],
-    queryFn: () => gql<{ runtimes: GqlRuntime[] }>(COMPONENT_RUNTIMES_QUERY, { environmentId: envId, projectId, componentId }).then((d) => d.runtimes),
+    queryFn: () => gql<{ runtimes: { items: GqlRuntime[]; pageInfo: GqlPageInfo } }>(COMPONENT_RUNTIMES_QUERY, { environmentId: envId, projectId, componentId }).then((d) => d.runtimes.items),
     enabled: enabled && !!envId && !!projectId && !!componentId,
   });
 }
@@ -281,17 +325,18 @@ export function useComponentRuntimes(envId: string, projectId: string, component
 const PROJECT_RUNTIMES_QUERY = `
   query GetProjectRuntimes($environmentId: String!, $projectId: String!) {
     runtimes(environmentId: $environmentId, projectId: $projectId) {
-      runtimeId, runtimeName, runtimeType, status, version,
-      platformName, platformVersion, platformHome,
-      osName, osVersion, registrationTime, lastHeartbeat,
-      component { displayName }
+      items { runtimeId, runtimeName, runtimeType, status, version,
+              platformName, platformVersion, platformHome,
+              osName, osVersion, registrationTime, lastHeartbeat,
+              component { displayName } }
+      pageInfo { total, limit, offset }
     }
   }`;
 
 export function useProjectRuntimes(envId: string, projectId: string) {
   return useQuery({
     queryKey: ['projectRuntimes', envId, projectId],
-    queryFn: () => gql<{ runtimes: GqlRuntime[] }>(PROJECT_RUNTIMES_QUERY, { environmentId: envId, projectId }).then((d) => d.runtimes),
+    queryFn: () => gql<{ runtimes: { items: GqlRuntime[]; pageInfo: GqlPageInfo } }>(PROJECT_RUNTIMES_QUERY, { environmentId: envId, projectId }).then((d) => d.runtimes.items),
     enabled: !!envId && !!projectId,
   });
 }
@@ -299,14 +344,53 @@ export function useProjectRuntimes(envId: string, projectId: string) {
 const ORG_RUNTIMES_QUERY = `
   query GetOrgRuntimes($environmentId: String!) {
     runtimes(environmentId: $environmentId) {
-      runtimeId, runtimeName, runtimeType, status, version,
-      platformName, platformVersion, platformHome,
-      osName, osVersion, registrationTime, lastHeartbeat,
-      component { displayName }
+      items { runtimeId, runtimeName, runtimeType, status, version,
+              platformName, platformVersion, platformHome,
+              osName, osVersion, registrationTime, lastHeartbeat,
+              component { displayName } }
+      pageInfo { total, limit, offset }
     }
   }`;
 
 export { RUNTIMES_QUERY, PROJECT_RUNTIMES_QUERY, ORG_RUNTIMES_QUERY };
+
+const RUNTIMES_PAGE_QUERY = `
+  query GetRuntimesPage($environmentId: String!, $projectId: String!, $componentId: String, $limit: Int!, $offset: Int!) {
+    runtimes(environmentId: $environmentId, projectId: $projectId, componentId: $componentId, pagination: { limit: $limit, offset: $offset }) {
+      items { runtimeId, runtimeName, runtimeType, status, version,
+              platformName, platformVersion, platformHome,
+              osName, osVersion, registrationTime, lastHeartbeat,
+              component { displayName } }
+      pageInfo { total, limit, offset }
+    }
+  }`;
+
+export function useRuntimesPage(envId: string, projectId: string, componentId: string | undefined, limit: number, offset: number) {
+  return useQuery({
+    queryKey: ['runtimes', 'page', envId, projectId, componentId, limit, offset],
+    queryFn: () => gql<{ runtimes: { items: GqlRuntime[]; pageInfo: GqlPageInfo } }>(RUNTIMES_PAGE_QUERY, { environmentId: envId, projectId, componentId, limit, offset }).then((d) => d.runtimes),
+    enabled: !!envId && !!projectId,
+  });
+}
+
+const ORG_RUNTIMES_PAGE_QUERY = `
+  query GetOrgRuntimesPage($environmentId: String!, $limit: Int!, $offset: Int!) {
+    runtimes(environmentId: $environmentId, pagination: { limit: $limit, offset: $offset }) {
+      items { runtimeId, runtimeName, runtimeType, status, version,
+              platformName, platformVersion, platformHome,
+              osName, osVersion, registrationTime, lastHeartbeat,
+              component { displayName } }
+      pageInfo { total, limit, offset }
+    }
+  }`;
+
+export function useOrgRuntimesPage(envId: string, limit: number, offset: number) {
+  return useQuery({
+    queryKey: ['runtimes', 'page', envId, limit, offset],
+    queryFn: () => gql<{ runtimes: { items: GqlRuntime[]; pageInfo: GqlPageInfo } }>(ORG_RUNTIMES_PAGE_QUERY, { environmentId: envId, limit, offset }).then((d) => d.runtimes),
+    enabled: !!envId,
+  });
+}
 
 // ── Component-level Bound Secrets ──
 
@@ -325,14 +409,15 @@ export interface GqlBoundSecret {
 export const COMPONENT_SECRETS_QUERY = `
   query GetComponentSecrets($componentId: String!, $environmentId: String!) {
     componentSecrets(componentId: $componentId, environmentId: $environmentId) {
-      keyId, createdAt, createdBy, runtimes { runtimeId, status }
+      items { keyId, createdAt, createdBy, runtimes { runtimeId, status } }
+      pageInfo { total, limit, offset }
     }
   }`;
 
 export function useComponentSecrets(componentId: string, environmentId: string) {
   return useQuery({
     queryKey: ['componentSecrets', componentId, environmentId],
-    queryFn: () => gql<{ componentSecrets: GqlBoundSecret[] }>(COMPONENT_SECRETS_QUERY, { componentId, environmentId }).then((d) => d.componentSecrets),
+    queryFn: () => gql<{ componentSecrets: { items: GqlBoundSecret[]; pageInfo: GqlPageInfo } }>(COMPONENT_SECRETS_QUERY, { componentId, environmentId }).then((d) => d.componentSecrets.items),
     enabled: !!componentId && !!environmentId,
   });
 }
@@ -351,14 +436,15 @@ export interface GqlOrgSecret {
 const ORG_SECRETS_QUERY = `
   query GetOrgSecrets($environmentId: String) {
     orgSecrets(environmentId: $environmentId) {
-      keyId, environmentId, environmentName, bound, createdAt, createdBy
+      items { keyId, environmentId, environmentName, bound, createdAt, createdBy }
+      pageInfo { total, limit, offset }
     }
   }`;
 
 export function useOrgSecrets(environmentId?: string) {
   return useQuery({
     queryKey: ['orgSecrets', environmentId],
-    queryFn: () => gql<{ orgSecrets: GqlOrgSecret[] }>(ORG_SECRETS_QUERY, environmentId ? { environmentId } : {}).then((d) => d.orgSecrets),
+    queryFn: () => gql<{ orgSecrets: { items: GqlOrgSecret[]; pageInfo: GqlPageInfo } }>(ORG_SECRETS_QUERY, environmentId ? { environmentId } : {}).then((d) => d.orgSecrets.items),
   });
 }
 
@@ -491,26 +577,56 @@ const ARTIFACT_QUERY_MAP: Record<string, { queryName: string; field: string; fie
 
 const IN_SYNC_KEYS = ['stateInSync', 'tracingInSync', 'statisticsInSync'] as const;
 
-export function useArtifacts(artifactType: string, envId: string, componentId: string, options?: { enabled?: boolean }) {
+export function useArtifacts(artifactType: string, envId: string, componentId: string, options?: { enabled?: boolean; active?: boolean }) {
   const mapping = ARTIFACT_QUERY_MAP[artifactType];
   const supportedInSyncKeys = mapping ? IN_SYNC_KEYS.filter((k) => mapping.gqlFields.includes(k)) : [];
+  const isActive = options?.active ?? true;
   return useQuery({
     queryKey: ['artifacts', artifactType, envId, componentId],
     queryFn: async () => {
       if (!mapping) return [];
-      const data = await gql<Record<string, GqlArtifact[]>>(`query ArtifactQuery($environmentId: String!, $componentId: String!) { ${mapping.field}(environmentId: $environmentId, componentId: $componentId) { ${mapping.gqlFields} } }`, {
-        environmentId: envId,
-        componentId,
-      });
-      return data[mapping.field] ?? [];
+      const data = await gql<Record<string, { items: GqlArtifact[] }>>(
+        `query ArtifactQuery($environmentId: String!, $componentId: String!) { ${mapping.field}(environmentId: $environmentId, componentId: $componentId) { items { ${mapping.gqlFields} } pageInfo { total, limit, offset } } }`,
+        {
+          environmentId: envId,
+          componentId,
+        },
+      );
+      return data[mapping.field]?.items ?? [];
     },
     enabled: !!artifactType && !!envId && !!componentId && !!mapping && (options?.enabled ?? true),
     refetchInterval: (query) => {
+      if (!isActive) return false;
       const artifacts = query.state.data;
       if (!artifacts) return false;
       const syncing = artifacts.some((a) => supportedInSyncKeys.some((k) => a[k] !== true));
       return syncing ? 1000 : false;
     },
+  });
+}
+
+// Paginated variant — used by the Supporting Artifacts panel. Passes limit/offset to the
+// backend so the GQL call carries real pagination params (not just client-side slicing).
+export function useArtifactPage(artifactType: string, envId: string, componentId: string, limit: number, offset: number, options?: { enabled?: boolean }) {
+  const mapping = ARTIFACT_QUERY_MAP[artifactType];
+  return useQuery({
+    queryKey: ['artifacts-page', artifactType, envId, componentId, limit, offset],
+    queryFn: async () => {
+      if (!mapping) return { items: [] as GqlArtifact[], total: 0 };
+      const data = await gql<Record<string, { items: GqlArtifact[]; pageInfo: GqlPageInfo }>>(
+        `query ArtifactQuery($environmentId: String!, $componentId: String!, $limit: Int!, $offset: Int!) {
+          ${mapping.field}(environmentId: $environmentId, componentId: $componentId, pagination: { limit: $limit, offset: $offset }) {
+            items { ${mapping.gqlFields} }
+            pageInfo { total, limit, offset }
+          }
+        }`,
+        { environmentId: envId, componentId, limit, offset },
+      );
+      const page = data[mapping.field];
+      return { items: page?.items ?? [], total: page?.pageInfo?.total ?? 0 };
+    },
+    enabled: !!artifactType && !!envId && !!componentId && !!mapping && (options?.enabled ?? true),
+    placeholderData: (prev) => prev,
   });
 }
 
@@ -780,28 +896,33 @@ export interface GqlLogFile {
 export interface GqlLogFilesByRuntime {
   count: number;
   files: GqlLogFile[];
+  pageInfo: GqlPageInfo;
 }
 
 const LOG_FILES_BY_RUNTIME_QUERY = `
-  query LogFilesByRuntime($runtimeId: String!, $searchKey: String) {
-    logFilesByRuntime(runtimeId: $runtimeId, searchKey: $searchKey) {
+  query LogFilesByRuntime($runtimeId: String!, $searchKey: String, $limit: Int, $offset: Int) {
+    logFilesByRuntime(runtimeId: $runtimeId, searchKey: $searchKey, pagination: { limit: $limit, offset: $offset }) {
       count
       files {
         fileName
         size
       }
+      pageInfo { total, limit, offset }
     }
   }`;
 
-export function useLogFilesByRuntime(runtimeId: string, searchKey?: string) {
+export function useLogFilesByRuntime(runtimeId: string, searchKey?: string, limit?: number, offset?: number) {
   return useQuery({
-    queryKey: ['logFiles', runtimeId, searchKey],
+    queryKey: ['logFiles', runtimeId, searchKey, limit, offset],
     queryFn: () =>
       gql<{ logFilesByRuntime: GqlLogFilesByRuntime }>(LOG_FILES_BY_RUNTIME_QUERY, {
         runtimeId,
         searchKey: searchKey || null,
+        limit: limit ?? null,
+        offset: offset ?? null,
       }).then((d) => d.logFilesByRuntime),
     enabled: !!runtimeId,
+    placeholderData: (prev) => prev,
   });
 }
 

@@ -337,7 +337,7 @@ export default function ManageLoggers(scope: ComponentScope): JSX.Element {
   const runtimeQueries = useQueries({
     queries: environments.map((env) => ({
       queryKey: ['runtimes', env.id, projectId, component?.id ?? ''],
-      queryFn: () => gql<{ runtimes: GqlRuntime[] }>(RUNTIMES_QUERY, { environmentId: env.id, projectId, componentId: component?.id ?? '' }).then((d) => d.runtimes),
+      queryFn: () => gql<{ runtimes: { items: GqlRuntime[] } }>(RUNTIMES_QUERY, { environmentId: env.id, projectId, componentId: component?.id ?? '' }).then((d) => d.runtimes.items),
       enabled: !!component?.id,
     })),
   });

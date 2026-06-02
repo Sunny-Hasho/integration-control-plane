@@ -30,6 +30,22 @@ import ballerina/url;
 // GraphQL listener configuration
 listener graphql:Listener graphqlListener = new (httpListener);
 
+const int MAX_PAGE_LIMIT = 500;
+const int DEFAULT_PAGE_LIMIT = 2;
+
+// Returns [sliceFrom, sliceTo, PageInfo] for a collection of `total` items.
+// When pagination is nil, the slice covers the entire collection.
+isolated function buildPageResult(int total, types:PaginationInput? pagination) returns [int, int, types:PageInfo] {
+    if pagination?.'limit is () {
+        return [0, total, {total, 'limit: total, offset: 0}];
+    }
+    int effectiveLimit = int:max(0, int:min(pagination?.'limit ?: DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT));
+    int safeOffset = int:max(0, int:min(pagination?.offset ?: 0, total));
+    int safeEnd = int:min(safeOffset + effectiveLimit, total);
+    log:printDebug("Building page result", total = total, 'limit = effectiveLimit, offset = safeOffset);
+    return [safeOffset, safeEnd, {total, 'limit: effectiveLimit, offset: safeOffset}];
+}
+
 // Reusable: pick a runtime from a list with optional runtimeId
 
 // Extract user context from GraphQL context
@@ -659,8 +675,9 @@ service /graphql on graphqlListener {
     // ----------- Runtime Resources
     // Get all runtimes with optional filtering
     // componentId is now optional - if not provided, returns all runtimes in the project
-    isolated resource function get runtimes(graphql:Context context, string? status, string? runtimeType, string? environmentId, string? projectId, string? componentId) returns types:Runtime[]|error {
+    isolated resource function get runtimes(graphql:Context context, string? status, string? runtimeType, string? environmentId, string? projectId, string? componentId, types:PaginationInput? pagination) returns types:RuntimesPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
+        types:Runtime[] allRuntimes = [];
 
         // Step 1: Determine the actual projectId
         string actualProjectId = projectId ?: "";
@@ -669,7 +686,7 @@ service /graphql on graphqlListener {
         if componentId is string && actualProjectId == "" {
             string|error projectIdResult = storage:getProjectIdByComponentId(componentId);
             if projectIdResult is error {
-                return []; // Component not found
+                return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}}; // Component not found
             }
             actualProjectId = projectIdResult;
         }
@@ -681,57 +698,50 @@ service /graphql on graphqlListener {
             types:AccessScope scope = auth:buildScopeFromContext("", envId = environmentId);
             if !check auth:hasAnyPermission(userContext.userId,
                     [auth:PERMISSION_ENVIRONMENT_MANAGE, auth:PERMISSION_ENVIRONMENT_MANAGE_NONPROD], scope) {
-                return [];
+                return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
             }
-            return check storage:getRuntimes(status, runtimeType, environmentId, (), componentId);
-        }
-
-        // If projectId is still empty and no environmentId, we cannot proceed
-        if actualProjectId == "" {
+            allRuntimes = check storage:getRuntimes(status, runtimeType, environmentId, (), componentId);
+        } else if actualProjectId == "" {
+            // If projectId is still empty and no environmentId, we cannot proceed
             return error("Either projectId or componentId must be provided");
-        }
-
-        // Step 3: If environmentId is specified, check access to that specific environment
-        if environmentId is string {
+        } else if environmentId is string {
+            // Step 3: environmentId specified — check access to that specific environment
             // Build scope with project, optional integration, and environment
             types:AccessScope scope = auth:buildScopeFromContext(actualProjectId, integrationId = componentId, envId = environmentId);
 
             // Check if user has permission to view this integration/project in this environment
             if !check auth:hasAnyPermission(userContext.userId,
                     [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
-                return []; // No access to this integration/project in this environment
+                return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}}; // No access to this integration/project in this environment
             }
-
             // Fetch runtimes for the specified environment
-            return check storage:getRuntimes(status, runtimeType, environmentId, actualProjectId, componentId);
+            allRuntimes = check storage:getRuntimes(status, runtimeType, environmentId, actualProjectId, componentId);
+        } else {
+            // Step 4: If environmentId is NOT specified, resolve accessible environments
+            auth:EnvironmentAccessInfo envAccess = check auth:resolveEnvironmentAccess(
+                    userContext.userId,
+                    projectId = actualProjectId,
+                    integrationId = componentId
+            );
+            // If no restriction, user can access all environments - fetch all runtimes
+            if !envAccess.hasRestriction {
+                allRuntimes = check storage:getRuntimes(status, runtimeType, (), actualProjectId, componentId);
+            } else {
+                // If blocked (empty allowed list), return empty
+                string[]? allowedEnvs = envAccess.allowedEnvironments;
+                if allowedEnvs is string[] && allowedEnvs.length() > 0 {
+                    // Fetch runtimes for each allowed environment and combine
+                    foreach string envId in allowedEnvs {
+                        types:Runtime[] envRuntimes = check storage:getRuntimes(status, runtimeType, envId, actualProjectId, componentId);
+                        allRuntimes.push(...envRuntimes);
+                    }
+                }
+            }
         }
 
-        // Step 4: If environmentId is NOT specified, resolve accessible environments
-        auth:EnvironmentAccessInfo envAccess = check auth:resolveEnvironmentAccess(
-                userContext.userId,
-                projectId = actualProjectId,
-                integrationId = componentId
-        );
-
-        // If no restriction, user can access all environments - fetch all runtimes
-        if !envAccess.hasRestriction {
-            return check storage:getRuntimes(status, runtimeType, (), actualProjectId, componentId);
-        }
-
-        // If blocked (empty allowed list), return empty
-        string[]? allowedEnvs = envAccess.allowedEnvironments;
-        if allowedEnvs is () || allowedEnvs.length() == 0 {
-            return [];
-        }
-
-        // Fetch runtimes for each allowed environment and combine
-        types:Runtime[] allRuntimes = [];
-        foreach string envId in allowedEnvs {
-            types:Runtime[] envRuntimes = check storage:getRuntimes(status, runtimeType, envId, actualProjectId, componentId);
-            allRuntimes.push(...envRuntimes);
-        }
-
-        return allRuntimes;
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(allRuntimes.length(), pagination);
+        log:printInfo("Fetching runtimes page", total = allRuntimes.length(), 'limit = pageInfo.'limit, offset = pageInfo.offset);
+        return {items: allRuntimes.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get a specific runtime by ID
@@ -796,7 +806,7 @@ service /graphql on graphqlListener {
     }
 
     // Get services for a specific runtime
-    isolated resource function get services(graphql:Context context, string runtimeId) returns types:Service[]|error {
+    isolated resource function get services(graphql:Context context, string runtimeId, types:PaginationInput? pagination = ()) returns types:ServicesPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // First, fetch the runtime to verify access to its environment
@@ -817,14 +827,16 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access runtime services without permission", userId = userContext.userId, runtimeId = runtimeId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
-        return check storage:getServicesForRuntime(runtimeId);
+        types:Service[] result = check storage:getServicesForRuntime(runtimeId);
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get services for a specific environment and component
-    isolated resource function get servicesByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:Service[]|error {
+    isolated resource function get servicesByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId, types:PaginationInput? pagination = ()) returns types:ServicesPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get project ID for the component (lightweight query for access control)
@@ -841,12 +853,12 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access component services without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
         types:Service[] result = check storage:getServicesByEnvironmentAndComponent(environmentId, componentId);
         if result.length() == 0 {
-            return result;
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
         map<map<types:ArtifactStateField>> sm = check storage:queryArtifactState(componentId, environmentId);
         foreach types:Service a in result {
@@ -857,11 +869,12 @@ service /graphql on graphqlListener {
                 a.stateInSync = s.inSync;
             }
         }
-        return result;
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get listeners for a specific runtime
-    isolated resource function get listeners(graphql:Context context, string runtimeId) returns types:Listener[]|error {
+    isolated resource function get listeners(graphql:Context context, string runtimeId, types:PaginationInput? pagination = ()) returns types:ListenersPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // First, fetch the runtime to verify access to its environment
@@ -882,14 +895,16 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access listeners without permission", userId = userContext.userId, runtimeId = runtimeId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
-        return check storage:getListenersForRuntime(runtimeId);
+        types:Listener[] result = check storage:getListenersForRuntime(runtimeId);
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get listeners for a specific environment and component
-    isolated resource function get listenersByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:Listener[]|error {
+    isolated resource function get listenersByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId, types:PaginationInput? pagination = ()) returns types:ListenersPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get project ID for the component (lightweight query for access control)
@@ -906,12 +921,12 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access listeners without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
         types:Listener[] result = check storage:getListenersByEnvironmentAndComponent(environmentId, componentId);
         if result.length() == 0 {
-            return result;
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
         map<map<types:ArtifactStateField>> sm = check storage:queryArtifactState(componentId, environmentId);
         foreach types:Listener a in result {
@@ -922,11 +937,12 @@ service /graphql on graphqlListener {
                 a.stateInSync = s.inSync;
             }
         }
-        return result;
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get automation artifacts for a specific environment and component
-    isolated resource function get automationsByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:Automation[]|error {
+    isolated resource function get automationsByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId, types:PaginationInput? pagination = ()) returns types:AutomationsPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get project ID for the component (lightweight query for access control)
@@ -943,14 +959,16 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access automations without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
-        return check storage:getAutomationsByEnvironmentAndComponent(environmentId, componentId);
+        types:Automation[] result = check storage:getAutomationsByEnvironmentAndComponent(environmentId, componentId);
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get REST APIs for a specific environment and component
-    isolated resource function get restApisByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:RestApi[]|error {
+    isolated resource function get restApisByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId, types:PaginationInput? pagination = ()) returns types:RestApisPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get project ID for the component (lightweight query for access control)
@@ -967,12 +985,12 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access component REST APIs without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
         types:RestApi[] result = check storage:getRestApisByEnvironmentAndComponent(environmentId, componentId);
         if result.length() == 0 {
-            return result;
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
         map<map<types:ArtifactStateField>> sm = check storage:queryArtifactState(componentId, environmentId);
         foreach types:RestApi a in result {
@@ -992,11 +1010,12 @@ service /graphql on graphqlListener {
                 a.statisticsInSync = st.inSync;
             }
         }
-        return result;
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get Composite Apps for a specific environment and component
-    isolated resource function get compositeAppsByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:CompositeApp[]|error {
+    isolated resource function get compositeAppsByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId, types:PaginationInput? pagination = ()) returns types:CompositeAppsPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get project ID for the component (lightweight query for access control)
@@ -1013,10 +1032,12 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access component Composite Apps without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
-        return check storage:getCompositeAppsByEnvironmentAndComponent(environmentId, componentId);
+        types:CompositeApp[] result = check storage:getCompositeAppsByEnvironmentAndComponent(environmentId, componentId);
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     isolated resource function get compositeAppFaultStackTrace(graphql:Context context, string runtimeId, string appName) returns types:CompositeAppFaultStackTrace|error {
@@ -1059,7 +1080,7 @@ service /graphql on graphqlListener {
     }
 
     // Get Inbound Endpoints for a specific environment and component
-    isolated resource function get inboundEndpointsByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:InboundEndpoint[]|error {
+    isolated resource function get inboundEndpointsByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId, types:PaginationInput? pagination = ()) returns types:InboundEndpointsPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get project ID for the component (lightweight query for access control)
@@ -1076,12 +1097,12 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access component inbound endpoints without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
         types:InboundEndpoint[] result = check storage:getInboundEndpointsByEnvironmentAndComponent(environmentId, componentId);
         if result.length() == 0 {
-            return result;
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
         map<map<types:ArtifactStateField>> sm = check storage:queryArtifactState(componentId, environmentId);
         foreach types:InboundEndpoint a in result {
@@ -1101,11 +1122,12 @@ service /graphql on graphqlListener {
                 a.statisticsInSync = st.inSync;
             }
         }
-        return result;
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get Endpoints for a specific environment and component
-    isolated resource function get endpointsByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:Endpoint[]|error {
+    isolated resource function get endpointsByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId, types:PaginationInput? pagination = ()) returns types:EndpointsPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get project ID for the component (lightweight query for access control)
@@ -1122,12 +1144,12 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access component endpoints without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
         types:Endpoint[] result = check storage:getEndpointsByEnvironmentAndComponent(environmentId, componentId);
         if result.length() == 0 {
-            return result;
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
         map<map<types:ArtifactStateField>> sm = check storage:queryArtifactState(componentId, environmentId);
         foreach types:Endpoint a in result {
@@ -1147,11 +1169,12 @@ service /graphql on graphqlListener {
                 a.statisticsInSync = st.inSync;
             }
         }
-        return result;
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get Sequences for a specific environment and component
-    isolated resource function get sequencesByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:Sequence[]|error {
+    isolated resource function get sequencesByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId, types:PaginationInput? pagination = ()) returns types:SequencesPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get project ID for the component (lightweight query for access control)
@@ -1168,12 +1191,12 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access component sequences without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
         types:Sequence[] result = check storage:getSequencesByEnvironmentAndComponent(environmentId, componentId);
         if result.length() == 0 {
-            return result;
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
         map<map<types:ArtifactStateField>> sm = check storage:queryArtifactState(componentId, environmentId);
         foreach types:Sequence a in result {
@@ -1193,11 +1216,12 @@ service /graphql on graphqlListener {
                 a.statisticsInSync = st.inSync;
             }
         }
-        return result;
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get Proxy Services for a specific environment and component
-    isolated resource function get proxyServicesByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:ProxyService[]|error {
+    isolated resource function get proxyServicesByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId, types:PaginationInput? pagination = ()) returns types:ProxyServicesPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get project ID for the component (lightweight query for access control)
@@ -1214,12 +1238,12 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access component proxy services without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
         types:ProxyService[] result = check storage:getProxyServicesByEnvironmentAndComponent(environmentId, componentId);
         if result.length() == 0 {
-            return result;
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
         map<map<types:ArtifactStateField>> sm = check storage:queryArtifactState(componentId, environmentId);
         foreach types:ProxyService a in result {
@@ -1239,11 +1263,12 @@ service /graphql on graphqlListener {
                 a.statisticsInSync = st.inSync;
             }
         }
-        return result;
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get Tasks for a specific environment and component
-    isolated resource function get tasksByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:Task[]|error {
+    isolated resource function get tasksByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId, types:PaginationInput? pagination = ()) returns types:TasksPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get project ID for the component (lightweight query for access control)
@@ -1260,12 +1285,12 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access component tasks without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
         types:Task[] result = check storage:getTasksByEnvironmentAndComponent(environmentId, componentId);
         if result.length() == 0 {
-            return result;
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
         map<map<types:ArtifactStateField>> sm = check storage:queryArtifactState(componentId, environmentId);
         foreach types:Task a in result {
@@ -1275,11 +1300,12 @@ service /graphql on graphqlListener {
                 a.stateInSync = s.inSync;
             }
         }
-        return result;
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get Templates for a specific environment and component
-    isolated resource function get templatesByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:Template[]|error {
+    isolated resource function get templatesByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId, types:PaginationInput? pagination = ()) returns types:TemplatesPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get project ID for the component (lightweight query for access control)
@@ -1296,14 +1322,16 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access component templates without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
-        return check storage:getTemplatesByEnvironmentAndComponent(environmentId, componentId);
+        types:Template[] result = check storage:getTemplatesByEnvironmentAndComponent(environmentId, componentId);
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get Message Stores for a specific environment and component
-    isolated resource function get messageStoresByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:MessageStore[]|error {
+    isolated resource function get messageStoresByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId, types:PaginationInput? pagination = ()) returns types:MessageStoresPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get project ID for the component (lightweight query for access control)
@@ -1320,12 +1348,12 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access component message stores without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
         types:MessageStore[] result = check storage:getMessageStoresByEnvironmentAndComponent(environmentId, componentId);
         if result.length() == 0 {
-            return result;
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
         map<map<types:ArtifactStateField>> sm = check storage:queryArtifactState(componentId, environmentId);
         foreach types:MessageStore a in result {
@@ -1335,11 +1363,12 @@ service /graphql on graphqlListener {
                 a.stateInSync = s.inSync;
             }
         }
-        return result;
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get Message Processors for a specific environment and component
-    isolated resource function get messageProcessorsByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:MessageProcessor[]|error {
+    isolated resource function get messageProcessorsByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId, types:PaginationInput? pagination = ()) returns types:MessageProcessorsPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get project ID for the component (lightweight query for access control)
@@ -1356,12 +1385,12 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access component message processors without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
         types:MessageProcessor[] result = check storage:getMessageProcessorsByEnvironmentAndComponent(environmentId, componentId);
         if result.length() == 0 {
-            return result;
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
         map<map<types:ArtifactStateField>> sm = check storage:queryArtifactState(componentId, environmentId);
         foreach types:MessageProcessor a in result {
@@ -1371,11 +1400,12 @@ service /graphql on graphqlListener {
                 a.stateInSync = s.inSync;
             }
         }
-        return result;
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get Local Entries for a specific environment and component
-    isolated resource function get localEntriesByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:LocalEntry[]|error {
+    isolated resource function get localEntriesByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId, types:PaginationInput? pagination = ()) returns types:LocalEntriesPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get project ID for the component (lightweight query for access control)
@@ -1392,12 +1422,12 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access component local entries without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
         types:LocalEntry[] result = check storage:getLocalEntriesByEnvironmentAndComponent(environmentId, componentId);
         if result.length() == 0 {
-            return result;
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
         map<map<types:ArtifactStateField>> sm = check storage:queryArtifactState(componentId, environmentId);
         foreach types:LocalEntry a in result {
@@ -1407,11 +1437,12 @@ service /graphql on graphqlListener {
                 a.stateInSync = s.inSync;
             }
         }
-        return result;
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get Data Services for a specific environment and component
-    isolated resource function get dataServicesByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:DataService[]|error {
+    isolated resource function get dataServicesByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId, types:PaginationInput? pagination = ()) returns types:DataServicesPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get project ID for the component (lightweight query for access control)
@@ -1428,12 +1459,12 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access component data services without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
         types:DataService[] result = check storage:getDataServicesByEnvironmentAndComponent(environmentId, componentId);
         if result.length() == 0 {
-            return result;
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
         map<map<types:ArtifactStateField>> sm = check storage:queryArtifactState(componentId, environmentId);
         foreach types:DataService a in result {
@@ -1443,11 +1474,12 @@ service /graphql on graphqlListener {
                 a.stateInSync = s.inSync;
             }
         }
-        return result;
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get Data Sources for a specific environment and component
-    isolated resource function get dataSourcesByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:DataSource[]|error {
+    isolated resource function get dataSourcesByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId, types:PaginationInput? pagination = ()) returns types:DataSourcesPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get project ID for the component (lightweight query for access control)
@@ -1464,14 +1496,16 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access component data sources without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
-        return check storage:getDataSourcesByEnvironmentAndComponent(environmentId, componentId);
+        types:DataSource[] result = check storage:getDataSourcesByEnvironmentAndComponent(environmentId, componentId);
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get Registry Resources for a specific environment and component
-    isolated resource function get registryResourcesByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:RegistryResource[]|error {
+    isolated resource function get registryResourcesByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId, types:PaginationInput? pagination = ()) returns types:RegistryResourcesPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get project ID for the component (lightweight query for access control)
@@ -1488,14 +1522,16 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access component registry resources without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
-        return check storage:getRegistryResourcesByEnvironmentAndComponent(environmentId, componentId);
+        types:RegistryResource[] result = check storage:getRegistryResourcesByEnvironmentAndComponent(environmentId, componentId);
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get Connectors for a specific environment and component
-    isolated resource function get connectorsByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:Connector[]|error {
+    isolated resource function get connectorsByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId, types:PaginationInput? pagination = ()) returns types:ConnectorsPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get project ID for the component (lightweight query for access control)
@@ -1512,12 +1548,12 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access component connectors without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
         types:Connector[] result = check storage:getConnectorsByEnvironmentAndComponent(environmentId, componentId);
         if result.length() == 0 {
-            return result;
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
         map<map<types:ArtifactStateField>> sm = check storage:queryArtifactState(componentId, environmentId);
         foreach types:Connector a in result {
@@ -1527,11 +1563,12 @@ service /graphql on graphqlListener {
                 a.stateInSync = s.inSync;
             }
         }
-        return result;
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get loggers for a specific runtime
-    isolated resource function get loggersByRuntime(graphql:Context context, string runtimeId) returns types:Logger[]|error {
+    isolated resource function get loggersByRuntime(graphql:Context context, string runtimeId, types:PaginationInput? pagination = ()) returns types:LoggersPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Fetch the runtime to get its context for authorization
@@ -1539,7 +1576,7 @@ service /graphql on graphqlListener {
 
         if runtime is () {
             log:printWarn("Runtime not found for loggers query", userId = userContext.userId, runtimeId = runtimeId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
         // Build scope from runtime's context
@@ -1552,18 +1589,19 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access runtime loggers without permission", userId = userContext.userId, runtimeId = runtimeId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
         // Check component type to determine data source
         types:RuntimeType componentType = runtime.component.componentType;
 
+        types:Logger[] result;
         if componentType == types:MI {
             // MI: Fetch loggers from management API
-            return check fetchMILoggersByRuntime(runtimeId, runtime);
+            result = check fetchMILoggersByRuntime(runtimeId, runtime);
         } else {
             // BI: Fetch loggers from database, then overlay reconcile state
-            types:Logger[] result = check fetchBILoggersByRuntime(runtimeId);
+            result = check fetchBILoggersByRuntime(runtimeId);
             if result.length() > 0 {
                 map<map<types:ArtifactStateField>> sm = check storage:queryArtifactState(
                         runtime.component.id, runtime.environment.id);
@@ -1574,19 +1612,20 @@ service /graphql on graphqlListener {
                     }
                 }
             }
-            return result;
         }
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get loggers for a specific environment and component, grouped by component name
-    isolated resource function get loggersByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId) returns types:LoggerGroup[]|error {
+    isolated resource function get loggersByEnvironmentAndComponent(graphql:Context context, string environmentId, string componentId, types:PaginationInput? pagination = ()) returns types:LoggerGroupsPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get component to check its type
         types:Component? component = check storage:getComponentById(componentId);
         if component is () {
             log:printWarn("Component not found for loggers query", userId = userContext.userId, componentId = componentId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
         // Build scope with project, integration, and environment
@@ -1600,35 +1639,36 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access component loggers without permission", userId = userContext.userId, environmentId = environmentId, componentId = componentId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
         // Check component type to determine data source
         types:RuntimeType componentType = component.componentType;
 
+        types:LoggerGroup[] result;
         if componentType == types:MI {
             // MI: Fetch loggers from management API for all runtimes
-            return check fetchMILoggersByEnvironmentAndComponent(environmentId, componentId, component.projectId);
+            result = check fetchMILoggersByEnvironmentAndComponent(environmentId, componentId, component.projectId);
         } else {
             // BI: Fetch loggers from database, then overlay reconcile state
-            types:LoggerGroup[] result = check storage:getLoggersByEnvironmentAndComponent(environmentId, componentId);
-            if result.length() == 0 {
-                return result;
-            }
-            map<map<types:ArtifactStateField>> sm = check storage:queryArtifactState(componentId, environmentId);
-            foreach types:LoggerGroup lg in result {
-                types:ArtifactStateField? s = stateOf(sm, lg.componentName, "log-level", "logLevel");
-                if s is types:ArtifactStateField {
-                    lg.logLevel = <types:LogLevel>s.value;
-                    lg.logLevelInSync = s.inSync;
+            result = check storage:getLoggersByEnvironmentAndComponent(environmentId, componentId);
+            if result.length() > 0 {
+                map<map<types:ArtifactStateField>> sm = check storage:queryArtifactState(componentId, environmentId);
+                foreach types:LoggerGroup lg in result {
+                    types:ArtifactStateField? s = stateOf(sm, lg.componentName, "log-level", "logLevel");
+                    if s is types:ArtifactStateField {
+                        lg.logLevel = <types:LogLevel>s.value;
+                        lg.logLevelInSync = s.inSync;
+                    }
                 }
             }
-            return result;
         }
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get log files for a specific runtime
-    isolated resource function get logFilesByRuntime(graphql:Context context, string runtimeId, string? searchKey = ()) returns types:LogFilesResponse|error {
+    isolated resource function get logFilesByRuntime(graphql:Context context, string runtimeId, string? searchKey = (), types:PaginationInput? pagination = ()) returns types:LogFilesResponse|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Fetch the runtime to get its context for authorization
@@ -1636,7 +1676,7 @@ service /graphql on graphqlListener {
 
         if runtime is () {
             log:printWarn("Runtime not found for log files query", userId = userContext.userId, runtimeId = runtimeId);
-            return {count: 0, files: []};
+            return {count: 0, files: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
         // Build scope from runtime's context
@@ -1649,7 +1689,7 @@ service /graphql on graphqlListener {
         // Verify user has view, edit, or manage permission
         if !check auth:hasAnyPermission(userContext.userId, [auth:PERMISSION_INTEGRATION_VIEW, auth:PERMISSION_INTEGRATION_EDIT, auth:PERMISSION_INTEGRATION_MANAGE], scope) {
             log:printWarn("Attempt to access runtime log files without permission", userId = userContext.userId, runtimeId = runtimeId);
-            return {count: 0, files: []};
+            return {count: 0, files: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
         // Check if runtime is online
@@ -1674,7 +1714,9 @@ service /graphql on graphqlListener {
         types:LogFile[] logFiles = from var item in mgmtResponse.list
             select {fileName: item.FileName, size: item.Size};
 
-        return {count: mgmtResponse.count, files: logFiles};
+        int total = logFiles.length();
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(total, pagination);
+        return {count: total, files: logFiles.slice(sliceFrom, sliceTo), pageInfo: pageInfo};
     }
 
     // Get log file content for a specific runtime and file name
@@ -1996,7 +2038,7 @@ service /graphql on graphqlListener {
     // Get all environments (filtered by user's accessible environments via RBAC)
     // Note: orgUuid, type, and projectId parameters are accepted for frontend compatibility
     // but ignored since environments are global (not org-specific)
-    isolated resource function get environments(graphql:Context context, string? orgUuid, string? 'type, string? projectId) returns types:Environment[]|error {
+    isolated resource function get environments(graphql:Context context, string? orgUuid, string? 'type, string? projectId, types:PaginationInput? pagination = ()) returns types:EnvironmentsPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get user's accessible environments (filtered by role mappings)
@@ -2007,7 +2049,7 @@ service /graphql on graphqlListener {
         // Check if user has any access at all
         if accessibleEnvs.length() == 0 {
             log:printWarn("Attempt to access environments without role mappings", userId = userContext.userId);
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
         // Build environment ID list from access mappings:
@@ -2050,7 +2092,8 @@ service /graphql on graphqlListener {
             }
         }
 
-        return environments;
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(environments.length(), pagination);
+        return {items: environments.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Delete an environment (requires management permission based on environment type)
@@ -2236,7 +2279,7 @@ service /graphql on graphqlListener {
     }
 
     // Get all projects (filtered by user's accessible projects via RBAC v2)
-    isolated resource function get projects(graphql:Context context, int? orgId) returns types:Project[]|error {
+    isolated resource function get projects(graphql:Context context, int? orgId, types:PaginationInput? pagination) returns types:ProjectsPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get accessible projects via access resolver
@@ -2246,7 +2289,7 @@ service /graphql on graphqlListener {
             check auth:getAccessibleProjects(userContext.userId);
 
         if accessibleProjects.length() == 0 {
-            return []; // User has no project access
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}}; // User has no project access
         }
 
         string[] accessibleProjectIds = accessibleProjects.map(p => p.projectUuid);
@@ -2255,7 +2298,8 @@ service /graphql on graphqlListener {
         types:Project[] filteredProjects =
             check storage:getProjectsByIds(accessibleProjectIds, orgId);
 
-        return filteredProjects;
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(filteredProjects.length(), pagination);
+        return {items: filteredProjects.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get a specific project by ID with optional orgId filter
@@ -2432,7 +2476,7 @@ service /graphql on graphqlListener {
     }
 
     // Get all components with optional project filter
-    isolated resource function get components(graphql:Context context, string orgHandler, string? projectId, types:ComponentOptionsInput? options) returns types:Component[]|error {
+    isolated resource function get components(graphql:Context context, string orgHandler, string? projectId, types:ComponentOptionsInput? options) returns types:ComponentsPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         // Get accessible integrations (with optional project filter)
@@ -2445,10 +2489,12 @@ service /graphql on graphqlListener {
 
         // Return empty if no access
         if integrationIds.length() == 0 {
-            return [];
+            return {items: [], pageInfo: {total: 0, 'limit: 0, offset: 0}};
         }
 
-        return check storage:getComponentsByIds(integrationIds);
+        types:Component[] allComponents = check storage:getComponentsByIds(integrationIds);
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(allComponents.length(), options?.pagination);
+        return {items: allComponents.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     // Get a specific component by ID or by projectId + componentHandler
@@ -2739,7 +2785,7 @@ service /graphql on graphqlListener {
 
     // ----------- Org-level Secrets (M1)
 
-    isolated resource function get orgSecrets(graphql:Context context, string? environmentId) returns types:OrgSecretListEntry[]|error {
+    isolated resource function get orgSecrets(graphql:Context context, string? environmentId, types:PaginationInput? pagination = ()) returns types:OrgSecretsPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
         log:printDebug(string `orgSecrets query by user=${userContext.userId}, environmentId=${environmentId ?: "all"}`);
 
@@ -2753,10 +2799,12 @@ service /graphql on graphqlListener {
             }
         }
 
-        return check storage:listOrgSecrets(environmentId);
+        types:OrgSecretListEntry[] result = check storage:listOrgSecrets(environmentId);
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
-    isolated resource function get componentSecrets(graphql:Context context, string componentId, string environmentId) returns types:BoundSecretEntry[]|error {
+    isolated resource function get componentSecrets(graphql:Context context, string componentId, string environmentId, types:PaginationInput? pagination = ()) returns types:BoundSecretsPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
         log:printDebug(string `componentSecrets query by user=${userContext.userId}, componentId=${componentId}, environmentId=${environmentId}`);
 
@@ -2770,7 +2818,9 @@ service /graphql on graphqlListener {
             return error("Access denied: insufficient permissions to view component secrets");
         }
 
-        return check storage:listBoundSecrets(componentId, environmentId);
+        types:BoundSecretEntry[] result = check storage:listBoundSecrets(componentId, environmentId);
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(result.length(), pagination);
+        return {items: result.slice(sliceFrom, sliceTo), pageInfo};
     }
 
     isolated remote function createOrgSecret(graphql:Context context, string environmentId, string? componentId = ()) returns string|error {
@@ -3579,7 +3629,7 @@ service /graphql on graphqlListener {
     // MI Runtime User Management
     // ============================================================
 
-    isolated resource function get getMIUsers(graphql:Context context, string componentId, string runtimeId) returns types:MIUsersResponse|error {
+    isolated resource function get getMIUsers(graphql:Context context, string componentId, string runtimeId, types:PaginationInput? pagination = ()) returns types:MIUsersPage|error {
         types:UserContextV2 userContext = check extractUserContext(context);
 
         types:Runtime? runtime = check storage:getRuntimeById(runtimeId);
@@ -3635,8 +3685,13 @@ service /graphql on graphqlListener {
             userList = listField;
         }
 
+        // Paginate before enrichment to avoid N HTTP calls for all users when only a page is needed
+        int total = userList.length();
+        [int, int, types:PageInfo] [sliceFrom, sliceTo, pageInfo] = buildPageResult(total, pagination);
+        json[] pageUsers = userList.slice(sliceFrom, sliceTo);
+
         types:MIUser[] enrichedUsers = [];
-        foreach json u in userList {
+        foreach json u in pageUsers {
             json|error userIdJson = u.userId;
             if userIdJson is error {
                 continue;
@@ -3670,7 +3725,7 @@ service /graphql on graphqlListener {
         }
 
         log:printDebug("Successfully fetched MI users from runtime", runtimeId = runtimeId, userCount = enrichedUsers.length());
-        return {users: enrichedUsers};
+        return {items: enrichedUsers, pageInfo};
     }
 
     isolated remote function addMIUser(graphql:Context context, string componentId, string runtimeId, string username, string password, boolean isAdmin = false, string domain = "primary") returns types:MIUserOperationResponse|error {

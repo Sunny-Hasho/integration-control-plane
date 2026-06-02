@@ -54,8 +54,11 @@ function testGetProjectsFilteredByAccess() returns error? {
     string query = string `
         query {
             projects {
-                id
-                name
+                items {
+                    id
+                    name
+                }
+                pageInfo { total limit offset }
             }
         }
     `;
@@ -66,8 +69,8 @@ function testGetProjectsFilteredByAccess() returns error? {
     test:assertFalse(response.errors is json, "Query should not return errors");
 
     json data = check response.data;
-    json projectsJson = check data.projects;
-    json[] projects = check projectsJson.ensureType();
+    json projectsPage = check data.projects;
+    json[] projects = check projectsPage.items.ensureType();
 
     // Project admin should NOT see Project 2
     boolean hasProject2 = false;

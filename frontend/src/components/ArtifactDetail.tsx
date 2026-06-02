@@ -42,7 +42,7 @@ import {
 } from '@wso2/oxygen-ui';
 import { ChevronDown, ChevronRight, Maximize2, X } from '@wso2/oxygen-ui-icons-react';
 import { useEffect, useRef, useState } from 'react';
-import { useArtifactTypes, useArtifacts, ARTIFACT_QUERY_MAP, type GqlArtifact } from '../api/queries';
+import { useArtifactTypes, useArtifactPage, ARTIFACT_QUERY_MAP, type GqlArtifact } from '../api/queries';
 import { useUpdateArtifactStatus, useUpdateListenerState } from '../api/mutations';
 import { useUpdateArtifactTracingStatus, useUpdateArtifactStatisticsStatus } from '../api/artifactToggleMutations';
 import { gql } from '../api/graphql';
@@ -98,9 +98,31 @@ function ListenerConfirmDialog({ open, action, listenerName, onConfirm, onCancel
   );
 }
 
-function SelectedTypeArtifacts({ artifacts, artifactType, envId, componentId, query, onSelect }: { artifacts: GqlArtifact[]; artifactType: string; envId: string; componentId: string; query: string; onSelect: (a: GqlArtifact) => void }) {
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(5);
+function SelectedTypeArtifacts({
+  artifacts,
+  artifactType,
+  envId,
+  componentId,
+  query,
+  onSelect,
+  serverTotal,
+  page,
+  rowsPerPage,
+  onPageChange,
+  onRowsPerPageChange,
+}: {
+  artifacts: GqlArtifact[];
+  artifactType: string;
+  envId: string;
+  componentId: string;
+  query: string;
+  onSelect: (a: GqlArtifact) => void;
+  serverTotal?: number;
+  page: number;
+  rowsPerPage: number;
+  onPageChange: (p: number) => void;
+  onRowsPerPageChange: (rpp: number) => void;
+}) {
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; artifact: GqlArtifact | null; action: 'START' | 'STOP' } | null>(null);
   const qc = useQueryClient();
   const toggleStatus = useUpdateArtifactStatus();
@@ -126,9 +148,13 @@ function SelectedTypeArtifacts({ artifacts, artifactType, envId, componentId, qu
   });
   const supportsToggle = ['Endpoint', 'Listener', 'MessageProcessor'].includes(artifactType);
   const hasStateField = ['Connector', 'CompositeApp'].includes(artifactType);
-  const maxPage = Math.max(0, Math.ceil(filtered.length / rowsPerPage) - 1);
+  // When search is active: filter client-side from server-fetched full list and slice locally.
+  // When no search (serverTotal provided): artifacts already come pre-sliced from the backend.
+  const isSearching = query.length > 0;
+  const totalCount = isSearching ? filtered.length : (serverTotal ?? artifacts.length);
+  const maxPage = Math.max(0, Math.ceil(totalCount / rowsPerPage) - 1);
   const safePage = Math.min(page, maxPage);
-  const paginatedArtifacts = filtered.slice(safePage * rowsPerPage, safePage * rowsPerPage + rowsPerPage);
+  const paginatedArtifacts = isSearching ? filtered.slice(safePage * rowsPerPage, safePage * rowsPerPage + rowsPerPage) : artifacts;
 
   // Calculate max toggle columns across all artifacts (for consistent sizing)
   const maxToggleColumns = (() => {
@@ -183,7 +209,7 @@ function SelectedTypeArtifacts({ artifacts, artifactType, envId, componentId, qu
       {
         onSettled: () => {
           // Invalidate and refetch the artifact list to sync with server
-          qc.invalidateQueries({ queryKey: ['artifacts', artifactType, envId, componentId] });
+          qc.invalidateQueries({ queryKey: ['artifacts-page', artifactType, envId, componentId] });
         },
       },
     );
@@ -202,7 +228,7 @@ function SelectedTypeArtifacts({ artifacts, artifactType, envId, componentId, qu
       {
         onSettled: () => {
           // Invalidate and refetch the artifact list to sync with server
-          qc.invalidateQueries({ queryKey: ['artifacts', artifactType, envId, componentId] });
+          qc.invalidateQueries({ queryKey: ['artifacts-page', artifactType, envId, componentId] });
         },
       },
     );
@@ -310,16 +336,16 @@ function SelectedTypeArtifacts({ artifacts, artifactType, envId, componentId, qu
           );
         })}
       </Stack>
-      {filtered.length > rowsPerPage && (
+      {totalCount > 0 && (
         <TablePagination
           component="div"
-          count={filtered.length}
+          count={totalCount}
           page={safePage}
-          onPageChange={(_, p) => setPage(p)}
+          onPageChange={(_, p) => onPageChange(p)}
           rowsPerPage={rowsPerPage}
           onRowsPerPageChange={(e) => {
-            setRowsPerPage(parseInt(e.target.value, 10));
-            setPage(0);
+            onRowsPerPageChange(parseInt(e.target.value, 10));
+            onPageChange(0);
           }}
           rowsPerPageOptions={[5, 10, 25]}
           sx={{ mt: 1 }}
@@ -336,10 +362,15 @@ export function ArtifactTypeSelector({ envId, componentId, onSelectArtifact }: {
   const { data: allTypes = [], isLoading } = useArtifactTypes(componentId, envId);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const types = allTypes.filter((t) => !ENTRY_POINT_TYPE_SET.has(t.artifactType));
   const selectedArtifactType = selectedType ?? types[0]?.artifactType ?? '';
-  const { data: artifacts = [], isLoading: loadingArtifacts } = useArtifacts(selectedArtifactType, envId, componentId);
+  const isSearching = query.length > 0;
+  // When searching, fetch all items (no limit/offset) so client-side filter works across all pages.
+  // When not searching, use server-side pagination.
+  const { data: pagedResult, isLoading: loadingArtifacts } = useArtifactPage(selectedArtifactType, envId, componentId, isSearching ? 10000 : rowsPerPage, isSearching ? 0 : page * rowsPerPage);
 
   if (isLoading) return <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />;
   if (types.length === 0)
@@ -360,6 +391,7 @@ export function ArtifactTypeSelector({ envId, componentId, onSelectArtifact }: {
               onClick={() => {
                 setSelectedType(t.artifactType);
                 setQuery('');
+                setPage(0);
               }}
               sx={{ borderRadius: 1, mb: 0.5 }}>
               {ARTIFACT_ICONS[t.artifactType] && <ListItemIcon sx={{ minWidth: 32 }}>{ARTIFACT_ICONS[t.artifactType]}</ListItemIcon>}
@@ -372,11 +404,35 @@ export function ArtifactTypeSelector({ envId, componentId, onSelectArtifact }: {
         <Typography variant="overline" sx={{ mb: 1, display: 'block' }}>
           {typePlural(selectedArtifactType)}
         </Typography>
-        <SearchField value={query} onChange={setQuery} placeholder={`Search ${typePlural(selectedArtifactType)} by name`} fullWidth sx={{ mb: 2 }} />
+        <SearchField
+          value={query}
+          onChange={(v) => {
+            setQuery(v);
+            setPage(0);
+          }}
+          placeholder={`Search ${typePlural(selectedArtifactType)} by name`}
+          fullWidth
+          sx={{ mb: 2 }}
+        />
         {loadingArtifacts ? (
           <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />
         ) : (
-          <SelectedTypeArtifacts artifacts={artifacts} artifactType={selectedArtifactType} envId={envId} componentId={componentId} query={query} onSelect={(a) => onSelectArtifact(a, selectedArtifactType, envId)} />
+          <SelectedTypeArtifacts
+            artifacts={pagedResult?.items ?? []}
+            artifactType={selectedArtifactType}
+            envId={envId}
+            componentId={componentId}
+            query={query}
+            onSelect={(a) => onSelectArtifact(a, selectedArtifactType, envId)}
+            serverTotal={pagedResult?.total}
+            page={page}
+            rowsPerPage={rowsPerPage}
+            onPageChange={setPage}
+            onRowsPerPageChange={(rpp) => {
+              setRowsPerPage(rpp);
+              setPage(0);
+            }}
+          />
         )}
       </Grid>
     </Grid>

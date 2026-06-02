@@ -49,10 +49,13 @@ function testGetEnvironmentsProjectLevel() returns error? {
     string query = string `
         query {
             environments {
-                id
-                name
-                critical
-                description
+                items {
+                    id
+                    name
+                    critical
+                    description
+                }
+                pageInfo { total limit offset }
             }
         }
     `;
@@ -68,8 +71,8 @@ function testGetEnvironmentsProjectLevel() returns error? {
     // Verify successful response
     test:assertTrue(responsePayload.data is json, "Response should contain data field");
     json data = check responsePayload.data;
-    json environmentsJson = check data.environments;
-    json[] environments = check environmentsJson.ensureType();
+    json environmentsPage = check data.environments;
+    json[] environments = check environmentsPage.items.ensureType();
 
     io:println("Project admin sees environments count: ", environments.length());
 }
@@ -83,9 +86,12 @@ function testGetEnvironmentsFilterByType() returns error? {
     string queryProd = string `
         query {
             environments(type: "prod") {
-                id
-                name
-                critical
+                items {
+                    id
+                    name
+                    critical
+                }
+                pageInfo { total limit offset }
             }
         }
     `;
@@ -99,8 +105,8 @@ function testGetEnvironmentsFilterByType() returns error? {
     io:println("testGetEnvironmentsFilterByType (prod) Response: ", responseProdPayload);
 
     json prodData = check responseProdPayload.data;
-    json prodEnvsJson = check prodData.environments;
-    json[] prodEnvs = check prodEnvsJson.ensureType();
+    json prodEnvsPage = check prodData.environments;
+    json[] prodEnvs = check prodEnvsPage.items.ensureType();
 
     // Verify all returned environments are critical (production)
     foreach json env in prodEnvs {
@@ -112,9 +118,12 @@ function testGetEnvironmentsFilterByType() returns error? {
     string queryNonProd = string `
         query {
             environments(type: "non-prod") {
-                id
-                name
-                critical
+                items {
+                    id
+                    name
+                    critical
+                }
+                pageInfo { total limit offset }
             }
         }
     `;
@@ -128,8 +137,8 @@ function testGetEnvironmentsFilterByType() returns error? {
     io:println("testGetEnvironmentsFilterByType (non-prod) Response: ", responseNonProdPayload);
 
     json nonProdData = check responseNonProdPayload.data;
-    json nonProdEnvsJson = check nonProdData.environments;
-    json[] nonProdEnvs = check nonProdEnvsJson.ensureType();
+    json nonProdEnvsPage = check nonProdData.environments;
+    json[] nonProdEnvs = check nonProdEnvsPage.items.ensureType();
 
     // Verify all returned environments are non-critical (non-production)
     foreach json env in nonProdEnvs {

@@ -46,9 +46,7 @@ import CodeBoxWithCopy from '../components/CodeBoxWithCopy';
 import { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import type { JSX } from 'react';
-import { useQueries } from '@tanstack/react-query';
-import { gql } from '../api/graphql';
-import { useAllEnvironments, useOrgSecrets, ORG_RUNTIMES_QUERY, type GqlEnvironment, type GqlRuntime } from '../api/queries';
+import { useAllEnvironments, useOrgSecrets, useOrgRuntimesPage, type GqlEnvironment, type GqlRuntime } from '../api/queries';
 import { useCreateOrgSecret, useDeleteRuntime, useRevokeOrgSecret } from '../api/mutations';
 import { formatDistanceToNow } from '../utils/time';
 import SearchField from '../components/SearchField';
@@ -258,20 +256,14 @@ function formatDate(iso: string): string {
 
 function EnvironmentRuntimeCard({
   env,
-  runtimes,
   onDelete,
   onViewLogs,
-  onRefresh,
-  isRefreshing,
   autoOpenAddRuntime,
   onAutoOpenConsumed,
 }: {
   env: GqlEnvironment;
-  runtimes: GqlRuntime[];
   onDelete: (r: GqlRuntime) => void;
   onViewLogs: (r: GqlRuntime) => void;
-  onRefresh: () => void;
-  isRefreshing?: boolean;
   autoOpenAddRuntime?: boolean;
   onAutoOpenConsumed?: () => void;
 }) {
@@ -283,13 +275,9 @@ function EnvironmentRuntimeCard({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const { hasAnyPermission } = useAccessControl();
-
-  useEffect(() => {
-    if (!autoOpenAddRuntime) return;
-    if (!hasAnyPermission([Permissions.ENVIRONMENT_MANAGE, Permissions.ENVIRONMENT_MANAGE_NONPROD])) return;
-    setAddOpen(true);
-    onAutoOpenConsumed?.();
-  }, [autoOpenAddRuntime, hasAnyPermission, onAutoOpenConsumed]);
+  const { data, isLoading, isFetching: isRefreshing, refetch } = useOrgRuntimesPage(env.id, query ? 500 : rowsPerPage, query ? 0 : page * rowsPerPage);
+  const runtimes = data?.items ?? [];
+  const serverTotal = data?.pageInfo?.total ?? 0;
 
   const filtered = runtimes.filter((r) => {
     if (!query) return true;
@@ -307,6 +295,19 @@ function EnvironmentRuntimeCard({
       (r.osVersion || '').toLowerCase().includes(q)
     );
   });
+
+  useEffect(() => {
+    if (!isLoading && serverTotal > 0 && filtered.length === 0 && page > 0) {
+      setPage((p) => p - 1);
+    }
+  }, [filtered.length, serverTotal, page, isLoading]);
+
+  useEffect(() => {
+    if (!autoOpenAddRuntime) return;
+    if (!hasAnyPermission([Permissions.ENVIRONMENT_MANAGE, Permissions.ENVIRONMENT_MANAGE_NONPROD])) return;
+    setAddOpen(true);
+    onAutoOpenConsumed?.();
+  }, [autoOpenAddRuntime, hasAnyPermission, onAutoOpenConsumed]);
 
   // Sorting logic
   const sorted = [...filtered].sort((a, b) => {
@@ -333,9 +334,8 @@ function EnvironmentRuntimeCard({
     return direction === 'asc' ? cmp : -cmp;
   });
 
-  const maxPage = Math.max(0, Math.ceil(sorted.length / rowsPerPage) - 1);
-  const safePage = Math.min(page, maxPage);
-  const paged = sorted.slice(safePage * rowsPerPage, safePage * rowsPerPage + rowsPerPage);
+  const paged = query ? sorted.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage) : sorted;
+  const total = query ? filtered.length : serverTotal;
 
   return (
     <>
@@ -346,7 +346,7 @@ function EnvironmentRuntimeCard({
               <Typography variant="h5" component="h2" sx={{ fontWeight: 600, textTransform: 'capitalize' }}>
                 {env.name}
               </Typography>
-              <Chip label={`${filtered.length} runtime${filtered.length !== 1 ? 's' : ''}`} size="small" color={filtered.length > 0 ? 'primary' : 'default'} />
+              <Chip label={`${total} runtime${total !== 1 ? 's' : ''}`} size="small" color={total > 0 ? 'primary' : 'default'} />
             </Stack>
             <Stack direction="row" gap={1} alignItems="center">
               <Authorized permissions={[Permissions.ENVIRONMENT_MANAGE, Permissions.ENVIRONMENT_MANAGE_NONPROD]}>
@@ -359,16 +359,26 @@ function EnvironmentRuntimeCard({
                   </Button>
                 </Stack>
               </Authorized>
-              <IconButton size="small" aria-label={`Refresh runtimes for ${env.name}`} onClick={onRefresh} disabled={isRefreshing}>
+              <IconButton size="small" aria-label={`Refresh runtimes for ${env.name}`} onClick={() => refetch()} disabled={isRefreshing}>
                 <RefreshCw size={16} />
               </IconButton>
             </Stack>
           </Stack>
           <Divider sx={{ mb: 2 }} />
           <Box sx={{ mb: 2, width: '100%', maxWidth: 400 }}>
-            <SearchField value={query} onChange={setQuery} placeholder="Search runtimes..." fullWidth />
+            <SearchField
+              value={query}
+              onChange={(v) => {
+                setQuery(v);
+                setPage(0);
+              }}
+              placeholder="Search runtimes..."
+              fullWidth
+            />
           </Box>
-          {filtered.length === 0 ? (
+          {isLoading ? (
+            <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />
+          ) : filtered.length === 0 ? (
             <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
               {query ? 'No runtimes match your search.' : 'No runtimes registered for this environment.'}
             </Typography>
@@ -484,21 +494,19 @@ function EnvironmentRuntimeCard({
                   ))}
                 </ListingTable.Body>
               </ListingTable>
-              {filtered.length > rowsPerPage && (
-                <TablePagination
-                  sx={{ borderTop: '1px solid', borderColor: 'divider', mt: 1 }}
-                  component="div"
-                  count={filtered.length}
-                  page={safePage}
-                  onPageChange={(_, p) => setPage(p)}
-                  rowsPerPage={rowsPerPage}
-                  onRowsPerPageChange={(e) => {
-                    setRowsPerPage(parseInt(e.target.value, 10));
-                    setPage(0);
-                  }}
-                  rowsPerPageOptions={[5, 10, 25]}
-                />
-              )}
+              <TablePagination
+                sx={{ borderTop: '1px solid', borderColor: 'divider', mt: 1 }}
+                component="div"
+                count={total}
+                page={page}
+                onPageChange={(_, p) => setPage(p)}
+                rowsPerPage={rowsPerPage}
+                onRowsPerPageChange={(e) => {
+                  setRowsPerPage(parseInt(e.target.value, 10));
+                  setPage(0);
+                }}
+                rowsPerPageOptions={[5, 10, 20, 25]}
+              />
             </>
           )}
         </CardContent>
@@ -535,14 +543,7 @@ export default function OrgRuntimes(_scope: OrgScope): JSX.Element {
     );
   }, [location.pathname, location.search, navigate, shouldAutoOpenAddRuntime]);
 
-  const runtimeQueries = useQueries({
-    queries: (environments ?? []).map((env) => ({
-      queryKey: ['runtimes', env.id],
-      queryFn: () => gql<{ runtimes: GqlRuntime[] }>(ORG_RUNTIMES_QUERY, { environmentId: env.id }).then((d) => d.runtimes),
-    })),
-  });
-
-  const isLoading = envsLoading || runtimeQueries.some((q) => q.isLoading);
+  const isLoading = envsLoading;
 
   return (
     <PageContent>
@@ -555,23 +556,16 @@ export default function OrgRuntimes(_scope: OrgScope): JSX.Element {
       ) : !environments?.length ? (
         <EmptyListing icon={<Server size={48} />} title="No environments found" description="Create an environment first to register runtimes." />
       ) : (
-        environments.map((env, index) => {
-          const query = runtimeQueries[index];
-          const runtimes = runtimeQueries[index]?.data ?? [];
-          return (
-            <EnvironmentRuntimeCard
-              key={env.id}
-              env={env}
-              runtimes={runtimes}
-              onDelete={setDeleting}
-              onViewLogs={setViewingLogs}
-              onRefresh={() => query?.refetch()}
-              isRefreshing={query?.isFetching}
-              autoOpenAddRuntime={shouldAutoOpenAddRuntime && (autoOpenEnvironmentId ? env.id === autoOpenEnvironmentId : index === 0)}
-              onAutoOpenConsumed={clearAutoOpenAction}
-            />
-          );
-        })
+        environments.map((env, index) => (
+          <EnvironmentRuntimeCard
+            key={env.id}
+            env={env}
+            onDelete={setDeleting}
+            onViewLogs={setViewingLogs}
+            autoOpenAddRuntime={shouldAutoOpenAddRuntime && (autoOpenEnvironmentId ? env.id === autoOpenEnvironmentId : index === 0)}
+            onAutoOpenConsumed={clearAutoOpenAction}
+          />
+        ))
       )}
 
       {viewingLogs && <LogFilesDrawer runtimeId={viewingLogs.runtimeId} onClose={() => setViewingLogs(null)} />}

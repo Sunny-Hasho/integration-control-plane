@@ -50,9 +50,12 @@ function testGetComponentsOrgLevel() returns error? {
     string query = string `
         query {
             components(orgHandler: "default") {
-                id
-                name
-                projectId
+                items {
+                    id
+                    name
+                    projectId
+                }
+                pageInfo { total limit offset }
             }
         }
     `;
@@ -64,8 +67,8 @@ function testGetComponentsOrgLevel() returns error? {
 
     // Verify data exists
     json data = check response.data;
-    json componentsJson = check data.components;
-    json[] components = check componentsJson.ensureType();
+    json componentsPage = check data.components;
+    json[] components = check componentsPage.items.ensureType();
 
     // Org-level user should see components from all projects
     test:assertTrue(components.length() >= 2, "Should return at least 2 components");
@@ -82,9 +85,12 @@ function testGetComponentsProjectLevel() returns error? {
     string query = string `
         query {
             components(orgHandler: "default") {
-                id
-                name
-                projectId
+                items {
+                    id
+                    name
+                    projectId
+                }
+                pageInfo { total limit offset }
             }
         }
     `;
@@ -96,8 +102,8 @@ function testGetComponentsProjectLevel() returns error? {
 
     // Verify data exists and doesn't include Project 2 components
     json data = check response.data;
-    json componentsJson = check data.components;
-    json[] components = check componentsJson.ensureType();
+    json componentsPage = check data.components;
+    json[] components = check componentsPage.items.ensureType();
 
     // Should not see Component 3 which is in Project 2
     boolean hasComponent3 = false;
@@ -121,9 +127,12 @@ function testGetComponentsWithProjectFilter() returns error? {
     string query = string `
         query GetComponents($projectId: String) {
             components(orgHandler: "default", projectId: $projectId) {
-                id
-                name
-                projectId
+                items {
+                    id
+                    name
+                    projectId
+                }
+                pageInfo { total limit offset }
             }
         }
     `;
@@ -138,8 +147,8 @@ function testGetComponentsWithProjectFilter() returns error? {
     test:assertFalse(response.errors is json, "Query should not return errors");
 
     json data = check response.data;
-    json componentsJson = check data.components;
-    json[] components = check componentsJson.ensureType();
+    json componentsPage = check data.components;
+    json[] components = check componentsPage.items.ensureType();
 
     // All returned components should belong to Project 1
     foreach json component in components {
