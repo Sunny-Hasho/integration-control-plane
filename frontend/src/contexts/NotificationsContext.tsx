@@ -28,11 +28,7 @@ const NotificationsContext = createContext<NotificationsContextValue | null>(nul
 export function NotificationsProvider({ children }: { children: ReactNode }): JSX.Element {
   const notif = useNotifications();
   console.log('[NotificationsProvider] mounted, actions:', Object.keys(notif.actions));
-  return (
-    <NotificationsContext.Provider value={{ ...notif, addNotification: notif.actions.add }}>
-      {children}
-    </NotificationsContext.Provider>
-  );
+  return <NotificationsContext.Provider value={{ ...notif, addNotification: notif.actions.add }}>{children}</NotificationsContext.Provider>;
 }
 
 export function useNotificationsContext(): NotificationsContextValue {

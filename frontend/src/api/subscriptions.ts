@@ -9,17 +9,12 @@ interface RuntimeStatusEvent {
   status: string;
 }
 
-function pushRuntimeNotification(
-  addNotification: ReturnType<typeof useNotificationsContext>['addNotification'],
-  event: RuntimeStatusEvent,
-) {
+function pushRuntimeNotification(addNotification: ReturnType<typeof useNotificationsContext>['addNotification'], event: RuntimeStatusEvent) {
   const offline = event.status === 'OFFLINE';
   addNotification({
     type: offline ? 'warning' : 'success',
     title: offline ? 'Runtime Offline' : 'Runtime Online',
-    message: offline
-      ? `Runtime ${event.runtimeId} in environment ${event.environmentId} has gone offline.`
-      : `Runtime ${event.runtimeId} in environment ${event.environmentId} is now running.`,
+    message: offline ? `Runtime ${event.runtimeId} in environment ${event.environmentId} has gone offline.` : `Runtime ${event.runtimeId} in environment ${event.environmentId} is now running.`,
     timestamp: new Date(),
     read: false,
     avatar: offline ? '!' : '✓',
@@ -59,11 +54,7 @@ export function useRuntimeStatusSubscription(environmentId: string | undefined) 
           queryClient.invalidateQueries({
             predicate: (query) => {
               const key = query.queryKey;
-              return (
-                Array.isArray(key) &&
-                ['runtimes', 'componentRuntimes', 'projectRuntimes'].includes(key[0] as string) &&
-                key.includes(environmentId)
-              );
+              return Array.isArray(key) && ['runtimes', 'componentRuntimes', 'projectRuntimes'].includes(key[0] as string) && key.includes(environmentId);
             },
           });
         } catch {
@@ -129,11 +120,7 @@ export function useMultiEnvRuntimeStatusSubscription(environmentIds: string[]) {
             queryClient.invalidateQueries({
               predicate: (query) => {
                 const key = query.queryKey;
-                return (
-                  Array.isArray(key) &&
-                  ['runtimes', 'componentRuntimes', 'projectRuntimes'].includes(key[0] as string) &&
-                  key.includes(environmentId)
-                );
+                return Array.isArray(key) && ['runtimes', 'componentRuntimes', 'projectRuntimes'].includes(key[0] as string) && key.includes(environmentId);
               },
             });
           } catch {
@@ -163,7 +150,7 @@ export function useMultiEnvRuntimeStatusSubscription(environmentIds: string[]) {
       cancelled = true;
       sockets.forEach((ws) => ws?.close());
     };
-  // Re-subscribe only when the set of environment IDs changes.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Re-subscribe only when the set of environment IDs changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [environmentIds.join(','), queryClient, addNotification]);
 }
