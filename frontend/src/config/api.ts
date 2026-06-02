@@ -52,7 +52,7 @@ const DEFAULT_CONFIG: ApiConfig = {
   graphqlUrl: 'https://localhost:9446/graphql',
   authBaseUrl: 'https://localhost:9446/auth',
   observabilityUrl: 'https://localhost:9446/icp/observability',
-  wsUrl: 'wss://localhost:9448/runtime-status',
+  wsUrl: 'wss://localhost:9446/runtime-status',
   ssoEnabled: false,
   version: '',
 };

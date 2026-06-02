@@ -77,9 +77,8 @@ configurable string backendGraphqlEndpoint = "https://localhost:9446/graphql";
 configurable string backendAuthBaseUrl = "https://localhost:9446/auth";
 configurable string backendObservabilityEndpoint = "https://localhost:9446/icp/observability";
 
-// WebSocket listener for runtime status push (separate port from HTTPS)
-configurable int runtimeWsPort = 9448;
-configurable string backendWsUrl = "wss://localhost:9448/runtime-status";
+// WebSocket endpoint — shares the main HTTPS port so no separate cert trust is needed
+configurable string backendWsUrl = "wss://localhost:9446/runtime-status";
 
 // Refresh token configuration
 configurable int refreshTokenExpiryTime = 86400; // 1 day (in seconds)

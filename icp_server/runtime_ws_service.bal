@@ -23,28 +23,12 @@ import ballerina/log;
 import ballerina/uuid;
 import ballerina/websocket;
 
-// Dedicated WebSocket listener for runtime status push.
-// Wraps an http:Listener (required for TLS config in this Ballerina version).
-// Separate from the main HTTPS listener (port 9446) so we can use the
-// websocket:Listener's native upgrade support.
-final http:Listener wsHttpListener = check new (runtimeWsPort,
-    config = {
-        host: serverHost,
-        httpVersion: http:HTTP_1_1,
-        secureSocket: {
-            key: {
-                path: keystorePath,
-                password: resolvedKeystorePassword
-            },
-            ciphers: tlsCiphers
-        }
-    }
-);
-
-listener websocket:Listener wsListener = new (wsHttpListener);
+// WebSocket listener shares the main HTTPS listener (port 9446) so the browser
+// never needs to separately trust a second TLS certificate.
+listener websocket:Listener wsListener = new (httpListener);
 
 // WebSocket upgrade service at /runtime-status.
-// Full URL: wss://host:9448/runtime-status?environmentId=<uuid>&token=<jwt>
+// Full URL: wss://host:9446/runtime-status?environmentId=<uuid>&token=<jwt>
 //
 // Auth: browsers cannot set custom headers on WebSocket upgrade requests, so
 // the JWT is passed as ?token=.  environmentId is also a query param.
