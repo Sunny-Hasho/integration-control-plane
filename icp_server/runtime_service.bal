@@ -26,6 +26,7 @@ import ballerina/log;
 listener http:Listener httpListener = new (serverPort,
     config = {
         host: serverHost,
+        httpVersion: http:HTTP_1_1,
         secureSocket: {
             key: {
                 path: keystorePath,

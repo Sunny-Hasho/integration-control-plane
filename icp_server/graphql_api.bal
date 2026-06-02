@@ -648,8 +648,10 @@ isolated function validateRegistryResourceAccess(
     return {runtime, trimmedPath};
 }
 
+
 @graphql:ServiceConfig {
     contextInit: utils:initGraphQLContext,
+    interceptors: new utils:WsAuthInterceptor(),
     cors: {
         allowOrigins: corsAllowedOrigins
     },
@@ -3874,5 +3876,6 @@ service /graphql on graphqlListener {
         _ = check extractUserContext(context);
         return {version: icpVersion};
     }
+
 }
 

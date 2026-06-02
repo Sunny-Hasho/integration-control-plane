@@ -83,6 +83,9 @@ public isolated function processHeartbeat(types:Heartbeat heartbeat, boolean pre
         return error(string `Failed to process heartbeat for runtime ${runtimeId}`, e);
     }
 
+    // Notify WebSocket subscribers of the runtime status change
+    runtimeBroadcaster.publish(heartbeat.environment, runtimeId, heartbeat.status);
+
     // Write observed state from heartbeat artifacts (skip for incomplete heartbeats to avoid pruning valid state)
     if !fullHeartbeatRequired {
         string? componentType = check getComponentTypeByRuntimeId(runtimeId);

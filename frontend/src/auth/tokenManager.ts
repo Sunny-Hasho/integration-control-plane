@@ -46,7 +46,7 @@ export function clearTokens(): void {
   localStorage.removeItem(REFRESH_TOKEN_EXPIRES_AT_KEY);
 }
 
-function isAccessTokenExpired(): boolean {
+export function isAccessTokenExpired(): boolean {
   const expiresAt = localStorage.getItem(TOKEN_EXPIRES_AT_KEY);
   if (!expiresAt) return true;
   return Date.now() >= Number(expiresAt) - EXPIRY_BUFFER_MS;

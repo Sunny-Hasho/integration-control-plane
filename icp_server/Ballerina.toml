@@ -5,4 +5,9 @@ version = "2.0.0-SNAPSHOT"
 license = ["Apache-2.0"]
 description = "ICP Server"
 
+[[dependency]]
+org = "ballerina"
+name = "websocket"
+version = "2.15.3"
+
 

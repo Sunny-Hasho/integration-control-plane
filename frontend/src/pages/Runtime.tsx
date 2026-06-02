@@ -581,7 +581,6 @@ export default function Runtime(scope: ProjectScope | ComponentScope): JSX.Eleme
   const componentId = component?.id;
   const integrationHandle = component?.handler || (hasComponent(scope) ? scope.component : '');
   const { data: environments = [] } = useEnvironments(projectId);
-
   const [deleting, setDeleting] = useState<GqlRuntime | null>(null);
   const [deletingEnvId, setDeletingEnvId] = useState<string | null>(null);
   const [alsoRevoke, setAlsoRevoke] = useState(false);

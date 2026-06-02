@@ -43,16 +43,16 @@ import {
   Typography,
   UserMenu,
   useAppShell,
-  useNotifications,
 } from '@wso2/oxygen-ui';
 import { useRef, useState } from 'react';
 import type { JSX } from 'react';
 import { useNavigate, Outlet, NavLink } from 'react-router';
 import Logo from '../components/Logo';
 import { BarChart3, Bell, Building, ChevronDown, ChevronRight, Layers, LayoutDashboard, LogOut, Plus, ScrollText, Search, Server, Shield, Sliders, User as UserIcon, X } from '@wso2/oxygen-ui-icons-react';
-import { useProjectByHandler, useProjects, useComponents } from '../api/queries';
-import { mockNotifications } from '../mock-data/mockNotifications';
+import { useProjectByHandler, useProjects, useComponents, useAllEnvironments } from '../api/queries';
+import { useMultiEnvRuntimeStatusSubscription } from '../api/subscriptions';
 import { useScope, useResource, resourceUrl, broaden, narrow, newProjectUrl, newComponentUrl, sidebarItems, hasProject, hasComponent, type Resource } from '../nav';
+import { useNotificationsContext } from '../contexts/NotificationsContext';
 import { cookiePolicyUrl, loginUrl, orgUrl, privacyPolicyUrl, profileUrl } from '../paths';
 import { useAuth } from '../auth/AuthContext';
 import { useAccessControl } from '../contexts/AccessControlContext';
@@ -97,8 +97,12 @@ export default function AppLayout(): JSX.Element {
   const [componentMenuDir, setComponentMenuDir] = useState<'right' | 'below'>('right');
   const [componentSearch, setComponentSearch] = useState('');
 
-  const { notifications, actions: notifActions, unreadCount, unreadNotifications } = useNotifications({ initialNotifications: [...mockNotifications] });
+  const { notifications, actions: notifActions, unreadCount, unreadNotifications } = useNotificationsContext();
   const alertNotifications = notifications.filter((n) => n.type === 'warning' || n.type === 'error');
+
+  const { data: allEnvironments = [], isLoading: envsLoading, isError: envsError } = useAllEnvironments();
+  console.log('[AppLayout] environments:', allEnvironments.length, 'loading:', envsLoading, 'error:', envsError);
+  useMultiEnvRuntimeStatusSubscription(allEnvironments.map((e) => e.id));
   const getFilteredNotifications = () => {
     if (tabIndex === 1) return unreadNotifications;
     if (tabIndex === 2) return alertNotifications;
