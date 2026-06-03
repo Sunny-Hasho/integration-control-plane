@@ -59,6 +59,15 @@ configurable int defaultTokenExpiryTime = 3600; // 1 hour (in seconds)
 // CORS configuration — restrict to known origins; default matches the local dev server
 configurable string[] corsAllowedOrigins = ["https://localhost:9446"];
 
+// Normalize a CORS origin by removing trailing slashes to ensure consistent matching
+public isolated function normalizeCorsOrigin(string origin) returns string {
+    return origin.endsWith("/") ? origin.substring(0, origin.length() - 1) : origin;
+}
+
+// Normalize CORS origins by removing trailing slashes to ensure consistent matching
+final string[] normalizedCorsAllowedOrigins = from string origin in corsAllowedOrigins
+    select normalizeCorsOrigin(origin);
+
 // TLS cipher suites — GCM and ChaCha20 only; CBC ciphers excluded (BEAST/POODLE/Lucky13)
 configurable string[] tlsCiphers = [
     "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
