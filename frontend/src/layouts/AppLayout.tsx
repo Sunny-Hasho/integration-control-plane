@@ -106,7 +106,10 @@ export default function AppLayout(): JSX.Element {
   const { data: allEnvironments = [], isLoading: envsLoading, isError: envsError } = useAllEnvironments();
   console.log('[AppLayout] environments:', allEnvironments.length, 'loading:', envsLoading, 'error:', envsError);
   const { runtimeStatusEnabled, setRuntimeStatusEnabled } = useNotificationPreferences();
-  useMultiEnvRuntimeStatusSubscription(allEnvironments.map((e) => e.id), runtimeStatusEnabled);
+  useMultiEnvRuntimeStatusSubscription(
+    allEnvironments.map((e) => e.id),
+    runtimeStatusEnabled,
+  );
   const getFilteredNotifications = () => {
     if (tabIndex === 1) return unreadNotifications;
     if (tabIndex === 2) return alertNotifications;
@@ -651,10 +654,7 @@ export default function AppLayout(): JSX.Element {
           )}
           <Divider />
           <Box sx={{ px: 2, py: 1.5 }}>
-            <FormControlLabel
-              control={<Switch size="small" checked={runtimeStatusEnabled} onChange={(e) => setRuntimeStatusEnabled(e.target.checked)} />}
-              label={<Typography variant="caption">Runtime status alerts</Typography>}
-            />
+            <FormControlLabel control={<Switch size="small" checked={runtimeStatusEnabled} onChange={(e) => setRuntimeStatusEnabled(e.target.checked)} />} label={<Typography variant="caption">Runtime status alerts</Typography>} />
           </Box>
         </NotificationPanel>
 
