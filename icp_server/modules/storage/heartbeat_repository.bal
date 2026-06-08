@@ -34,12 +34,14 @@ public isolated function processHeartbeat(types:Heartbeat heartbeat, boolean pre
         check validateHeartbeatResolution(heartbeat);
     }
 
+    string? previousStatus = ();
     boolean isNewRegistration = false;
     boolean fullHeartbeatRequired = false;
     string runtimeId = heartbeat.runtimeId;
 
     transaction {
-        isNewRegistration = check upsertRuntime(heartbeat);
+        previousStatus = check upsertRuntime(heartbeat);
+        isNewRegistration = previousStatus is ();
 
         // After upsertRuntime, use runtimeId for all operations
         if isNewRegistration {
@@ -83,8 +85,13 @@ public isolated function processHeartbeat(types:Heartbeat heartbeat, boolean pre
         return error(string `Failed to process heartbeat for runtime ${runtimeId}`, e);
     }
 
-    // Notify WebSocket subscribers of the runtime status change
-    runtimeBroadcaster.publish(heartbeat.environment, runtimeId, heartbeat.status);
+    // Notify WebSocket subscribers only when status actually changes (or on first registration).
+    // Suppress events for steady-state heartbeats to avoid duplicate notifications.
+    if previousStatus is () || previousStatus != heartbeat.status {
+        string|error envNameResult = getEnvironmentNameById(heartbeat.environment);
+        string environmentName = envNameResult is string ? envNameResult : heartbeat.environment;
+        runtimeBroadcaster.publish(heartbeat.environment, environmentName, runtimeId, heartbeat.status);
+    }
 
     // Write observed state from heartbeat artifacts (skip for incomplete heartbeats to avoid pruning valid state)
     if !fullHeartbeatRequired {
@@ -519,7 +526,7 @@ isolated function writeObservedStateBI(string runtimeId, string componentId, str
 }
 
 // Upsert runtime record
-isolated function upsertRuntime(types:Heartbeat heartbeat) returns boolean|error {
+isolated function upsertRuntime(types:Heartbeat heartbeat) returns string?|error {
     string? runtimeName = heartbeat.runtime;
     string runtimeId = heartbeat.runtimeId;
     log:printDebug(string `Upserting runtime: id=${runtimeId}, name=${runtimeName ?: "null"}`);
@@ -555,13 +562,14 @@ isolated function upsertRuntime(types:Heartbeat heartbeat) returns boolean|error
         }
     }
 
-    // Determine new-vs-existing by explicit SELECT before the upsert
-    stream<record {|string runtime_id;|}, sql:Error?> existingById = dbClient->query(`
-        SELECT runtime_id FROM runtimes WHERE runtime_id = ${runtimeId}
+    // Determine new-vs-existing and capture previous status before the upsert
+    stream<record {|string runtime_id; string status;|}, sql:Error?> existingById = dbClient->query(`
+        SELECT runtime_id, status FROM runtimes WHERE runtime_id = ${runtimeId}
     `);
-    record {|string runtime_id;|}[] existingByIdRows = check from record {|string runtime_id;|} r in existingById
+    record {|string runtime_id; string status;|}[] existingByIdRows = check from var r in existingById
         select r;
     boolean isNewRegistration = existingByIdRows.length() == 0;
+    string? previousStatus = isNewRegistration ? () : existingByIdRows[0].status;
 
     // Atomic upsert for PostgreSQL, fallback to INSERT/UPDATE for others
     if dbType == POSTGRESQL {
@@ -663,7 +671,7 @@ isolated function upsertRuntime(types:Heartbeat heartbeat) returns boolean|error
             WHERE runtime_id = ${runtimeId}
         `);
     }
-    return isNewRegistration;
+    return previousStatus;
 }
 
 // Insert all runtime artifacts

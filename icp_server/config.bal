@@ -57,7 +57,7 @@ configurable decimal userServiceJwtClockSkewSeconds = 0;
 configurable int defaultTokenExpiryTime = 3600; // 1 hour (in seconds)
 
 // CORS configuration — restrict to known origins; default matches the local dev server
-configurable string[] corsAllowedOrigins = ["https://localhost:9446", "http://localhost:5174"];
+configurable string[] corsAllowedOrigins = ["https://localhost:9446", "http://localhost:5173"];
 
 // TLS cipher suites — GCM and ChaCha20 only; CBC ciphers excluded (BEAST/POODLE/Lucky13)
 configurable string[] tlsCiphers = [

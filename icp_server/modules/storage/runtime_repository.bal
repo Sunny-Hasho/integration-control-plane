@@ -179,7 +179,7 @@ public isolated function deleteRuntime(string runtimeId) returns error? {
     log:printInfo(string `Successfully deleted runtime ${runtimeId}`);
 }
 
-type StaleRuntimeRow record {|string runtime_id; string environment_id;|};
+type StaleRuntimeRow record {|string runtime_id; string environment_id; string environment_name;|};
 
 // Mark runtimes as offline if they haven't sent heartbeat within timeout
 // For K8S deployments, delete OFFLINE runtimes instead of marking them
@@ -190,11 +190,13 @@ public isolated function markOfflineRuntimes() returns error? {
     // Pre-query stale runtimes before the DELETE/UPDATE so we can publish OFFLINE
     // events after the operation (for K8S the rows are deleted so we must read first).
     sql:ParameterizedQuery staleSelectQuery = sql:queryConcat(
-            `SELECT runtime_id, environment_id FROM runtimes
-        WHERE status != 'OFFLINE'
-        AND last_heartbeat IS NOT NULL
+            `SELECT r.runtime_id, r.environment_id, e.name AS environment_name
+        FROM runtimes r
+        JOIN environments e ON r.environment_id = e.environment_id
+        WHERE r.status != 'OFFLINE'
+        AND r.last_heartbeat IS NOT NULL
         AND `,
-            sqlQueryFromString(getTimestampDiffSeconds("last_heartbeat", "CURRENT_TIMESTAMP")),
+            sqlQueryFromString(getTimestampDiffSeconds("r.last_heartbeat", "CURRENT_TIMESTAMP")),
             ` > ${heartbeatTimeoutSeconds}`
     );
 
@@ -246,7 +248,7 @@ public isolated function markOfflineRuntimes() returns error? {
 
     // Notify WebSocket subscribers for each runtime that just went offline
     foreach StaleRuntimeRow r in staleRows {
-        runtimeBroadcaster.publish(r.environment_id, r.runtime_id, "OFFLINE");
+        runtimeBroadcaster.publish(r.environment_id, r.environment_name, r.runtime_id, "OFFLINE");
     }
 }
 

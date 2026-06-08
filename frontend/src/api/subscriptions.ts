@@ -5,6 +5,7 @@ import { useNotificationsContext } from '../contexts/NotificationsContext';
 
 interface RuntimeStatusEvent {
   environmentId: string;
+  environmentName: string;
   runtimeId: string;
   status: string;
 }
@@ -14,7 +15,7 @@ function pushRuntimeNotification(addNotification: ReturnType<typeof useNotificat
   addNotification({
     type: offline ? 'warning' : 'success',
     title: offline ? 'Runtime Offline' : 'Runtime Online',
-    message: offline ? `Runtime ${event.runtimeId} in environment ${event.environmentId} has gone offline.` : `Runtime ${event.runtimeId} in environment ${event.environmentId} is now running.`,
+    message: offline ? `Runtime ${event.runtimeId} in environment ${event.environmentName} (${event.environmentId}) has gone offline.` : `Runtime ${event.runtimeId} in environment ${event.environmentName} (${event.environmentId}) is now running.`,
     timestamp: new Date(),
     read: false,
     avatar: offline ? '!' : '✓',
@@ -28,8 +29,12 @@ function pushRuntimeNotification(addNotification: ReturnType<typeof useNotificat
 export function useRuntimeStatusSubscription(environmentId: string | undefined) {
   const queryClient = useQueryClient();
   const { addNotification } = useNotificationsContext();
+  const addNotificationRef = useRef(addNotification);
   const retryRef = useRef(0);
   const wsRef = useRef<WebSocket | null>(null);
+
+  // Keep the ref current on every render without re-opening sockets.
+  addNotificationRef.current = addNotification;
 
   useEffect(() => {
     if (!environmentId) return;
@@ -38,6 +43,7 @@ export function useRuntimeStatusSubscription(environmentId: string | undefined) 
     async function connect() {
       if (cancelled) return;
       const url = await buildRuntimeStatusWsUrl(environmentId!);
+      if (cancelled) return;
       const ws = new WebSocket(url);
       wsRef.current = ws;
 
@@ -50,7 +56,7 @@ export function useRuntimeStatusSubscription(environmentId: string | undefined) 
         try {
           const event: RuntimeStatusEvent = JSON.parse(evt.data as string);
           console.log('[ws] event received', event);
-          pushRuntimeNotification(addNotification, event);
+          pushRuntimeNotification(addNotificationRef.current, event);
           queryClient.invalidateQueries({
             predicate: (query) => {
               const key = query.queryKey;
@@ -81,7 +87,9 @@ export function useRuntimeStatusSubscription(environmentId: string | undefined) 
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [environmentId, queryClient, addNotification]);
+    // addNotification intentionally excluded — held in a ref to avoid tearing down sockets on every notification.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [environmentId, queryClient]);
 }
 
 // Subscribes to runtime status changes for multiple environments at once.
@@ -89,6 +97,10 @@ export function useRuntimeStatusSubscription(environmentId: string | undefined) 
 export function useMultiEnvRuntimeStatusSubscription(environmentIds: string[]) {
   const queryClient = useQueryClient();
   const { addNotification } = useNotificationsContext();
+  const addNotificationRef = useRef(addNotification);
+
+  // Keep the ref current on every render without re-opening sockets.
+  addNotificationRef.current = addNotification;
 
   useEffect(() => {
     console.log('[ws] subscribing to environments:', environmentIds);
@@ -104,6 +116,7 @@ export function useMultiEnvRuntimeStatusSubscription(environmentIds: string[]) {
       async function connect() {
         if (cancelled) return;
         const url = await buildRuntimeStatusWsUrl(environmentId);
+        if (cancelled) return;
         const ws = new WebSocket(url);
         sockets[index] = ws;
 
@@ -116,7 +129,7 @@ export function useMultiEnvRuntimeStatusSubscription(environmentIds: string[]) {
           try {
             const event: RuntimeStatusEvent = JSON.parse(evt.data as string);
             console.log('[ws] event received', environmentId, event);
-            pushRuntimeNotification(addNotification, event);
+            pushRuntimeNotification(addNotificationRef.current, event);
             queryClient.invalidateQueries({
               predicate: (query) => {
                 const key = query.queryKey;
@@ -150,7 +163,8 @@ export function useMultiEnvRuntimeStatusSubscription(environmentIds: string[]) {
       cancelled = true;
       sockets.forEach((ws) => ws?.close());
     };
+    // addNotification intentionally excluded — held in a ref to avoid tearing down sockets on every notification.
     // Re-subscribe only when the set of environment IDs changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [environmentIds.join(','), queryClient, addNotification]);
+  }, [environmentIds.join(','), queryClient]);
 }

@@ -211,6 +211,17 @@ public isolated function getEnvironmentById(string environmentId) returns types:
     };
 }
 
+public isolated function getEnvironmentNameById(string environmentId) returns string|error {
+    stream<record {|string name;|}, sql:Error?> nameStream =
+        dbClient->query(`SELECT name FROM environments WHERE environment_id = ${environmentId}`);
+    record {|string name;|}[] records = check from var r in nameStream
+        select r;
+    if records.length() == 0 {
+        return error(string `Environment ${environmentId} not found.`);
+    }
+    return records[0].name;
+}
+
 // Create a new environment
 public isolated function createEnvironment(types:EnvironmentInput environment) returns types:Environment|error? {
     log:printInfo(string `Register environment : ${environment.toString()}`);

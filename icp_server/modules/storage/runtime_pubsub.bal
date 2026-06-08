@@ -20,6 +20,7 @@ import ballerina/websocket;
 // Payload pushed to connected WebSocket clients on each status change.
 public type RuntimeStatusEvent record {|
     string environmentId;
+    string environmentName;
     string runtimeId;
     string status;
 |};
@@ -55,7 +56,7 @@ public isolated class RuntimeBroadcaster {
 
     // Called from heartbeat processing and the offline scheduler.
     // Writes to each live caller; removes callers that have already closed.
-    public isolated function publish(string environmentId, string runtimeId, string status) {
+    public isolated function publish(string environmentId, string environmentName, string runtimeId, string status) {
         string payload;
         lock {
             map<websocket:Caller>? callers = self.topics[environmentId];
@@ -63,7 +64,7 @@ public isolated class RuntimeBroadcaster {
                 log:printDebug("No WS subscribers for runtime status event", environmentId = environmentId, runtimeId = runtimeId, status = status);
                 return;
             }
-            payload = string `{"environmentId":"${environmentId}","runtimeId":"${runtimeId}","status":"${status}"}`;
+            payload = string `{"environmentId":"${environmentId}","environmentName":"${environmentName}","runtimeId":"${runtimeId}","status":"${status}"}`;
             string[] dead = [];
             foreach var [clientId, caller] in callers.entries() {
                 websocket:Error? err = caller->writeTextMessage(payload);
@@ -74,7 +75,7 @@ public isolated class RuntimeBroadcaster {
             foreach string clientId in dead {
                 _ = callers.remove(clientId);
             }
-            log:printInfo("Published runtime status event", environmentId = environmentId, runtimeId = runtimeId, status = status, subscribers = callers.length());
+            log:printInfo("Published runtime status event", environmentId = environmentId, environmentName = environmentName, runtimeId = runtimeId, status = status, subscribers = callers.length());
         }
     }
 }
