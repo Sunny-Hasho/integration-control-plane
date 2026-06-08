@@ -96,7 +96,7 @@ service class RuntimeStatusWsService {
     }
 
     remote function onError(websocket:Caller caller, error err) {
-        log:printDebug("WS error, removing client", environmentId = self.environmentId, clientId = self.clientId);
+        log:printWarn("WS error, removing client", err, environmentId = self.environmentId, clientId = self.clientId);
         storage:runtimeBroadcaster.unsubscribe(self.environmentId, self.clientId);
     }
 }

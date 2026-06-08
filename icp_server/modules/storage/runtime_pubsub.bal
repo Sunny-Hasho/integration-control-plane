@@ -64,7 +64,8 @@ public isolated class RuntimeBroadcaster {
                 log:printDebug("No WS subscribers for runtime status event", environmentId = environmentId, runtimeId = runtimeId, status = status);
                 return;
             }
-            payload = string `{"environmentId":"${environmentId}","environmentName":"${environmentName}","runtimeId":"${runtimeId}","status":"${status}"}`;
+            RuntimeStatusEvent event = {environmentId, environmentName, runtimeId, status};
+            payload = event.toJson().toJsonString();
             string[] dead = [];
             foreach var [clientId, caller] in callers.entries() {
                 websocket:Error? err = caller->writeTextMessage(payload);

@@ -5,10 +5,21 @@ import { getAccessToken, isAccessTokenExpired, refreshAccessToken } from '../aut
 // on WebSocket upgrade requests.
 export async function buildRuntimeStatusWsUrl(environmentId: string): Promise<string> {
   if (isAccessTokenExpired()) {
-    await refreshAccessToken();
+    try {
+      await refreshAccessToken();
+    } catch (err) {
+      console.error('[wsClient] token refresh failed, cannot open WebSocket', err);
+      throw new Error(`WebSocket connection aborted: token refresh failed — ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
+
+  const base = window.API_CONFIG?.wsUrl;
+  if (!base) {
+    console.error('[wsClient] window.API_CONFIG.wsUrl is missing or empty');
+    throw new Error('WebSocket connection aborted: API_CONFIG.wsUrl is not configured');
+  }
+
   const token = getAccessToken();
-  const base = window.API_CONFIG.wsUrl;
   const url = `${base}?environmentId=${encodeURIComponent(environmentId)}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
   console.log('[wsClient] connecting to', base);
   return url;
