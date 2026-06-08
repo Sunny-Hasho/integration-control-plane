@@ -94,13 +94,15 @@ export function useRuntimeStatusSubscription(environmentId: string | undefined) 
 
 // Subscribes to runtime status changes for multiple environments at once.
 // Used by AppLayout so notifications are active on every page.
-export function useMultiEnvRuntimeStatusSubscription(environmentIds: string[]) {
+export function useMultiEnvRuntimeStatusSubscription(environmentIds: string[], notificationsEnabled: boolean = true) {
   const queryClient = useQueryClient();
   const { addNotification } = useNotificationsContext();
   const addNotificationRef = useRef(addNotification);
+  const notificationsEnabledRef = useRef(notificationsEnabled);
 
-  // Keep the ref current on every render without re-opening sockets.
+  // Keep refs current on every render without re-opening sockets.
   addNotificationRef.current = addNotification;
+  notificationsEnabledRef.current = notificationsEnabled;
 
   useEffect(() => {
     console.log('[ws] subscribing to environments:', environmentIds);
@@ -129,7 +131,9 @@ export function useMultiEnvRuntimeStatusSubscription(environmentIds: string[]) {
           try {
             const event: RuntimeStatusEvent = JSON.parse(evt.data as string);
             console.log('[ws] event received', environmentId, event);
-            pushRuntimeNotification(addNotificationRef.current, event);
+            if (notificationsEnabledRef.current) {
+              pushRuntimeNotification(addNotificationRef.current, event);
+            }
             queryClient.invalidateQueries({
               predicate: (query) => {
                 const key = query.queryKey;

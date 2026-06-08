@@ -19,6 +19,7 @@
 import {
   AppShell,
   Badge,
+  Box,
   Button,
   ColorSchemeToggle,
   ComplexSelect,
@@ -29,15 +30,16 @@ import {
   DialogTitle,
   Divider,
   Footer,
+  FormControlLabel,
   formatRelativeTime,
   Header,
   IconButton,
   InputAdornment,
   MenuItem,
   NotificationPanel,
-  Box,
   Popover,
   Sidebar,
+  Switch,
   TextField,
   Tooltip,
   Typography,
@@ -51,6 +53,7 @@ import Logo from '../components/Logo';
 import { BarChart3, Bell, Building, ChevronDown, ChevronRight, Layers, LayoutDashboard, LogOut, Plus, ScrollText, Search, Server, Shield, Sliders, User as UserIcon, X } from '@wso2/oxygen-ui-icons-react';
 import { useProjectByHandler, useProjects, useComponents, useAllEnvironments } from '../api/queries';
 import { useMultiEnvRuntimeStatusSubscription } from '../api/subscriptions';
+import { useNotificationPreferences } from '../hooks/useNotificationPreferences';
 import { useScope, useResource, resourceUrl, broaden, narrow, newProjectUrl, newComponentUrl, sidebarItems, hasProject, hasComponent, type Resource } from '../nav';
 import { useNotificationsContext } from '../contexts/NotificationsContext';
 import { cookiePolicyUrl, loginUrl, orgUrl, privacyPolicyUrl, profileUrl } from '../paths';
@@ -102,7 +105,8 @@ export default function AppLayout(): JSX.Element {
 
   const { data: allEnvironments = [], isLoading: envsLoading, isError: envsError } = useAllEnvironments();
   console.log('[AppLayout] environments:', allEnvironments.length, 'loading:', envsLoading, 'error:', envsError);
-  useMultiEnvRuntimeStatusSubscription(allEnvironments.map((e) => e.id));
+  const { runtimeStatusEnabled, setRuntimeStatusEnabled } = useNotificationPreferences();
+  useMultiEnvRuntimeStatusSubscription(allEnvironments.map((e) => e.id), runtimeStatusEnabled);
   const getFilteredNotifications = () => {
     if (tabIndex === 1) return unreadNotifications;
     if (tabIndex === 2) return alertNotifications;
@@ -645,6 +649,13 @@ export default function AppLayout(): JSX.Element {
               ))}
             </NotificationPanel.List>
           )}
+          <Divider />
+          <Box sx={{ px: 2, py: 1.5 }}>
+            <FormControlLabel
+              control={<Switch size="small" checked={runtimeStatusEnabled} onChange={(e) => setRuntimeStatusEnabled(e.target.checked)} />}
+              label={<Typography variant="caption">Runtime status alerts</Typography>}
+            />
+          </Box>
         </NotificationPanel>
 
         {/* Confirm Dialog - managed locally */}
