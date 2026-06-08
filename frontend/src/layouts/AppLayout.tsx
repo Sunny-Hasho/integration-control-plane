@@ -654,7 +654,7 @@ export default function AppLayout(): JSX.Element {
           )}
           <Divider />
           <Box sx={{ px: 2, py: 1.5 }}>
-            <FormControlLabel control={<Switch size="small" checked={runtimeStatusEnabled} onChange={(e) => setRuntimeStatusEnabled(e.target.checked)} />} label={<Typography variant="caption">Runtime status alerts</Typography>} />
+            <FormControlLabel control={<Switch size="small" checked={runtimeStatusEnabled} onChange={(e) => setRuntimeStatusEnabled(e.target.checked)} />} label={<Typography variant="caption">Runtime &amp; log level alerts</Typography>} />
           </Box>
         </NotificationPanel>
 

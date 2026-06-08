@@ -20,7 +20,11 @@ export async function buildRuntimeStatusWsUrl(environmentId: string): Promise<st
   }
 
   const token = getAccessToken();
-  const url = `${base}?environmentId=${encodeURIComponent(environmentId)}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
+  if (!token) {
+    console.error('[wsClient] no access token available after refresh, cannot open WebSocket');
+    throw new Error('WebSocket connection aborted: no access token available');
+  }
+  const url = `${base}?environmentId=${encodeURIComponent(environmentId)}&token=${encodeURIComponent(token)}`;
   console.log('[wsClient] connecting to', base);
   return url;
 }

@@ -4,11 +4,23 @@ import { buildRuntimeStatusWsUrl } from './wsClient';
 import { useNotificationsContext } from '../contexts/NotificationsContext';
 
 interface RuntimeStatusEvent {
+  eventType?: string;
   environmentId: string;
   environmentName: string;
   runtimeId: string;
   status: string;
 }
+
+interface LogLevelChangeEvent {
+  eventType: 'LOG_LEVEL_CHANGE';
+  environmentId: string;
+  environmentName: string;
+  runtimeId: string;
+  loggerName: string;
+  logLevel: string;
+}
+
+type ICPEvent = RuntimeStatusEvent | LogLevelChangeEvent;
 
 function pushRuntimeNotification(addNotification: ReturnType<typeof useNotificationsContext>['addNotification'], event: RuntimeStatusEvent) {
   const offline = event.status === 'OFFLINE';
@@ -19,6 +31,17 @@ function pushRuntimeNotification(addNotification: ReturnType<typeof useNotificat
     timestamp: new Date(),
     read: false,
     avatar: offline ? '!' : '✓',
+  });
+}
+
+function pushLogLevelNotification(addNotification: ReturnType<typeof useNotificationsContext>['addNotification'], event: LogLevelChangeEvent) {
+  addNotification({
+    type: 'info',
+    title: 'Log Level Changed',
+    message: `Logger "${event.loggerName}" set to ${event.logLevel} in environment ${event.environmentName}.`,
+    timestamp: new Date(),
+    read: false,
+    avatar: '≡',
   });
 }
 
@@ -54,15 +77,29 @@ export function useRuntimeStatusSubscription(environmentId: string | undefined) 
 
       ws.onmessage = (evt) => {
         try {
-          const event: RuntimeStatusEvent = JSON.parse(evt.data as string);
+          const event: ICPEvent = JSON.parse(evt.data as string);
           console.log('[ws] event received', event);
-          pushRuntimeNotification(addNotificationRef.current, event);
-          queryClient.invalidateQueries({
-            predicate: (query) => {
-              const key = query.queryKey;
-              return Array.isArray(key) && ['runtimes', 'componentRuntimes', 'projectRuntimes'].includes(key[0] as string) && key.includes(environmentId);
-            },
-          });
+          if (event.eventType === 'LOG_LEVEL_CHANGE') {
+            if (notificationsEnabledRef.current) {
+              pushLogLevelNotification(addNotificationRef.current, event as LogLevelChangeEvent);
+            }
+            queryClient.invalidateQueries({
+              predicate: (query) => {
+                const key = query.queryKey;
+                return Array.isArray(key) && key[0] === 'loggers' && key.includes(environmentId);
+              },
+            });
+          } else {
+            if (notificationsEnabledRef.current) {
+              pushRuntimeNotification(addNotificationRef.current, event as RuntimeStatusEvent);
+            }
+            queryClient.invalidateQueries({
+              predicate: (query) => {
+                const key = query.queryKey;
+                return Array.isArray(key) && ['runtimes', 'componentRuntimes', 'projectRuntimes'].includes(key[0] as string) && key.includes(environmentId);
+              },
+            });
+          }
         } catch {
           console.warn('[ws] failed to parse message', evt.data);
         }
@@ -129,17 +166,29 @@ export function useMultiEnvRuntimeStatusSubscription(environmentIds: string[], n
 
         ws.onmessage = (evt) => {
           try {
-            const event: RuntimeStatusEvent = JSON.parse(evt.data as string);
+            const event: ICPEvent = JSON.parse(evt.data as string);
             console.log('[ws] event received', environmentId, event);
-            if (notificationsEnabledRef.current) {
-              pushRuntimeNotification(addNotificationRef.current, event);
+            if (event.eventType === 'LOG_LEVEL_CHANGE') {
+              if (notificationsEnabledRef.current) {
+                pushLogLevelNotification(addNotificationRef.current, event as LogLevelChangeEvent);
+              }
+              queryClient.invalidateQueries({
+                predicate: (query) => {
+                  const key = query.queryKey;
+                  return Array.isArray(key) && key[0] === 'loggers' && key.includes(environmentId);
+                },
+              });
+            } else {
+              if (notificationsEnabledRef.current) {
+                pushRuntimeNotification(addNotificationRef.current, event as RuntimeStatusEvent);
+              }
+              queryClient.invalidateQueries({
+                predicate: (query) => {
+                  const key = query.queryKey;
+                  return Array.isArray(key) && ['runtimes', 'componentRuntimes', 'projectRuntimes'].includes(key[0] as string) && key.includes(environmentId);
+                },
+              });
             }
-            queryClient.invalidateQueries({
-              predicate: (query) => {
-                const key = query.queryKey;
-                return Array.isArray(key) && ['runtimes', 'componentRuntimes', 'projectRuntimes'].includes(key[0] as string) && key.includes(environmentId);
-              },
-            });
           } catch {
             console.warn('[ws] failed to parse message', evt.data);
           }

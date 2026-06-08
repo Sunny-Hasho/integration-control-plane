@@ -19,10 +19,21 @@ import ballerina/websocket;
 
 // Payload pushed to connected WebSocket clients on each status change.
 public type RuntimeStatusEvent record {|
+    string eventType = "RUNTIME_STATUS";
     string environmentId;
     string environmentName;
     string runtimeId;
     string status;
+|};
+
+// Payload pushed when a log level is changed for a runtime component.
+public type LogLevelChangeEvent record {|
+    string eventType = "LOG_LEVEL_CHANGE";
+    string environmentId;
+    string environmentName;
+    string runtimeId;
+    string loggerName;
+    string logLevel;
 |};
 
 // Fan-out broadcaster over plain WebSocket connections.
@@ -56,8 +67,11 @@ public isolated class RuntimeBroadcaster {
 
     // Called from heartbeat processing and the offline scheduler.
     // Writes to each live caller; removes callers that have already closed.
+    // The lock is held only to snapshot callers and build the payload, then
+    // released before I/O so that subscribe/unsubscribe are not blocked.
     public isolated function publish(string environmentId, string environmentName, string runtimeId, string status) {
         string payload;
+        map<websocket:Caller> snapshot = {};
         lock {
             map<websocket:Caller>? callers = self.topics[environmentId];
             if callers is () || callers.length() == 0 {
@@ -66,17 +80,68 @@ public isolated class RuntimeBroadcaster {
             }
             RuntimeStatusEvent event = {environmentId, environmentName, runtimeId, status};
             payload = event.toJson().toJsonString();
-            string[] dead = [];
             foreach var [clientId, caller] in callers.entries() {
-                websocket:Error? err = caller->writeTextMessage(payload);
-                if err is websocket:Error {
-                    dead.push(clientId);
+                snapshot[clientId] = caller;
+            }
+        }
+
+        // Perform network I/O outside the lock.
+        string[] dead = [];
+        foreach var [clientId, caller] in snapshot.entries() {
+            websocket:Error? err = caller->writeTextMessage(payload);
+            if err is websocket:Error {
+                dead.push(clientId);
+            }
+        }
+
+        // Re-lock briefly to prune dead callers and log.
+        // cloneReadOnly() produces an immutable copy that can cross the lock boundary.
+        string[] & readonly deadSnapshot = dead.cloneReadOnly();
+        lock {
+            map<websocket:Caller>? callers = self.topics[environmentId];
+            if callers is map<websocket:Caller> {
+                foreach string clientId in deadSnapshot {
+                    _ = callers.remove(clientId);
                 }
+                log:printInfo("Published runtime status event", environmentId = environmentId, environmentName = environmentName, runtimeId = runtimeId, status = status, subscribers = callers.length());
             }
-            foreach string clientId in dead {
-                _ = callers.remove(clientId);
+        }
+    }
+    // Called when a log level is changed via the GraphQL mutation.
+    // Uses the same lock-snapshot-I/O pattern as publish().
+    public isolated function publishLogLevelChange(string environmentId, string environmentName, string runtimeId, string loggerName, string logLevel) {
+        string payload;
+        map<websocket:Caller> snapshot = {};
+        lock {
+            map<websocket:Caller>? callers = self.topics[environmentId];
+            if callers is () || callers.length() == 0 {
+                log:printDebug("No WS subscribers for log level change event", environmentId = environmentId, runtimeId = runtimeId, loggerName = loggerName);
+                return;
             }
-            log:printInfo("Published runtime status event", environmentId = environmentId, environmentName = environmentName, runtimeId = runtimeId, status = status, subscribers = callers.length());
+            LogLevelChangeEvent event = {environmentId, environmentName, runtimeId, loggerName, logLevel};
+            payload = event.toJson().toJsonString();
+            foreach var [clientId, caller] in callers.entries() {
+                snapshot[clientId] = caller;
+            }
+        }
+
+        string[] dead = [];
+        foreach var [clientId, caller] in snapshot.entries() {
+            websocket:Error? err = caller->writeTextMessage(payload);
+            if err is websocket:Error {
+                dead.push(clientId);
+            }
+        }
+
+        string[] & readonly deadSnapshot = dead.cloneReadOnly();
+        lock {
+            map<websocket:Caller>? callers = self.topics[environmentId];
+            if callers is map<websocket:Caller> {
+                foreach string clientId in deadSnapshot {
+                    _ = callers.remove(clientId);
+                }
+                log:printInfo("Published log level change event", environmentId = environmentId, environmentName = environmentName, runtimeId = runtimeId, loggerName = loggerName, logLevel = logLevel, subscribers = callers.length());
+            }
         }
     }
 }

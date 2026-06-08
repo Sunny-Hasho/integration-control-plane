@@ -28,7 +28,10 @@ function loadPrefs(): NotificationPreferences {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      return { runtimeStatusEnabled: true, ...JSON.parse(raw) };
+      const parsed = JSON.parse(raw);
+      return {
+        runtimeStatusEnabled: typeof parsed.runtimeStatusEnabled === 'boolean' ? parsed.runtimeStatusEnabled : true,
+      };
     }
   } catch {
     // ignore parse errors — fall through to default

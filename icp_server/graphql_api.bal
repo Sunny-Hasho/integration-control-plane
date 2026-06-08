@@ -303,6 +303,7 @@ isolated function updateLogLevelBI(types:UserContextV2 userContext, types:Update
     string componentName = componentNameOpt;
     string logLevelStr = input.logLevel.toString();
     map<boolean> processed = {};
+    record {|string envId; string envName; string runtimeId;|}[] pendingEvents = [];
 
     foreach string runtimeId in input.runtimeIds {
         types:Runtime? runtime = check storage:getRuntimeById(runtimeId);
@@ -326,7 +327,13 @@ isolated function updateLogLevelBI(types:UserContextV2 userContext, types:Update
             log:printDebug("upsertReconcileDesiredState for log-level", componentId = componentId, envId = envId);
             check storage:upsertReconcileDesiredState(componentId, envId, artifact,
                     {"logLevel": logLevelStr});
+            pendingEvents.push({envId, envName: runtime.environment.name, runtimeId});
         }
+    }
+
+    // Publish after all runtimes are processed (one event per component+env).
+    foreach var evt in pendingEvents {
+        storage:runtimeBroadcaster.publishLogLevelChange(evt.envId, evt.envName, evt.runtimeId, componentName, logLevelStr);
     }
 
     return {
@@ -391,6 +398,7 @@ isolated function updateLogLevelMI(types:UserContextV2 userContext, types:Update
     int successCount = 0;
     int failureCount = 0;
     map<boolean> processedComponents = {};
+    record {|string envId; string envName; string runtimeId;|}[] pendingEvents = [];
 
     foreach types:ValidatedRuntime validated in validatedRuntimes {
         // Persist intended state via reconcile engine (once per component+env)
@@ -474,6 +482,11 @@ isolated function updateLogLevelMI(types:UserContextV2 userContext, types:Update
                     loggerName = loggerName,
                     logLevel = logLevelStr);
             successCount += 1;
+            pendingEvents.push({
+                envId: validated.runtime.environment.id,
+                envName: validated.runtime.environment.name,
+                runtimeId: validated.runtimeId
+            });
         }
     }
 
@@ -483,6 +496,15 @@ isolated function updateLogLevelMI(types:UserContextV2 userContext, types:Update
             message: string `Failed to update logger ${loggerName} on all ${failureCount} runtime(s)`,
             commandIds: []
         };
+    }
+
+    // Publish one WS event per environment after all runtimes are updated.
+    map<boolean> notifiedEnvs = {};
+    foreach var evt in pendingEvents {
+        if !notifiedEnvs.hasKey(evt.envId) {
+            notifiedEnvs[evt.envId] = true;
+            storage:runtimeBroadcaster.publishLogLevelChange(evt.envId, evt.envName, evt.runtimeId, loggerName, logLevelStr);
+        }
     }
 
     string message = successCount == validatedRuntimes.length()
@@ -647,7 +669,6 @@ isolated function validateRegistryResourceAccess(
     log:printDebug(string `Access validated for ${operation}`, userId = userContext.userId, runtimeId = runtimeId, trimmedPath = trimmedPath);
     return {runtime, trimmedPath};
 }
-
 
 @graphql:ServiceConfig {
     contextInit: utils:initGraphQLContext,
