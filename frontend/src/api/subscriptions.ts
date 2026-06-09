@@ -49,15 +49,17 @@ function pushLogLevelNotification(addNotification: ReturnType<typeof useNotifica
 // reconnects with exponential backoff whenever the connection drops.
 // On each message the relevant TanStack Query cache entries are invalidated
 // and a notification is pushed to the global notification panel.
-export function useRuntimeStatusSubscription(environmentId: string | undefined) {
+export function useRuntimeStatusSubscription(environmentId: string | undefined, notificationsEnabled: boolean = true) {
   const queryClient = useQueryClient();
   const { addNotification } = useNotificationsContext();
   const addNotificationRef = useRef(addNotification);
+  const notificationsEnabledRef = useRef(notificationsEnabled);
   const retryRef = useRef(0);
   const wsRef = useRef<WebSocket | null>(null);
 
-  // Keep the ref current on every render without re-opening sockets.
+  // Keep refs current on every render without re-opening sockets.
   addNotificationRef.current = addNotification;
+  notificationsEnabledRef.current = notificationsEnabled;
 
   useEffect(() => {
     if (!environmentId) return;
