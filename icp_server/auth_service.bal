@@ -44,6 +44,10 @@ isolated function extractClientIp(http:Request req) returns string? {
 }
 service /auth on httpListener {
 
+    function init() {
+        log:printInfo("Auth service started at " + serverHost + ":" + authServicePort.toString());
+    }
+
     // Returns the user-management operations supported by the active user store.
     // The frontend uses this to show or hide UI features (e.g. create user, change password).
     @http:ResourceConfig {
@@ -64,8 +68,13 @@ service /auth on httpListener {
         if ldapUserStoreEnabled {
             caps = ["authenticate"];
         } else {
-            caps = ["authenticate", "password_change", "password_reset",
-                    "unlock_account", "create"];
+            caps = [
+                "authenticate",
+                "password_change",
+                "password_reset",
+                "unlock_account",
+                "create"
+            ];
         }
         return <http:Ok>{body: {capabilities: caps}};
     }
@@ -2101,7 +2110,7 @@ service /auth on httpListener {
         if username.trim().length() == 0 {
             return utils:createBadRequestError("Username is required");
         }
-        if !re`^[a-zA-Z0-9_.]+$`.isFullMatch(username) {
+        if !re `^[a-zA-Z0-9_.]+$`.isFullMatch(username) {
             return utils:createBadRequestError("Username may only contain letters, digits, underscores, and dots");
         }
         if password.trim().length() == 0 {
@@ -2159,7 +2168,7 @@ service /auth on httpListener {
             } else {
                 log:printInfo(string `Successfully cleaned up user from credentials DB`, userId = userId);
             }
-            
+
             return utils:createInternalServerError(string `Failed to create user: ${createdUser.message()}`);
         }
 

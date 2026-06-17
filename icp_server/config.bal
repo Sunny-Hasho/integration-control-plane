@@ -57,7 +57,7 @@ configurable decimal userServiceJwtClockSkewSeconds = 0;
 configurable int defaultTokenExpiryTime = 3600; // 1 hour (in seconds)
 
 // CORS configuration — restrict to known origins; default matches the local dev server
-configurable string[] corsAllowedOrigins = ["https://localhost:9446"];
+configurable string[] corsAllowedOrigins = ["https://localhost:9446", "http://localhost:5173"];
 
 // Normalize a CORS origin by removing trailing slashes to ensure consistent matching
 public isolated function normalizeCorsOrigin(string origin) returns string {
@@ -85,6 +85,9 @@ configurable string[] tlsCiphers = [
 configurable string backendGraphqlEndpoint = "https://localhost:9446/graphql";
 configurable string backendAuthBaseUrl = "https://localhost:9446/auth";
 configurable string backendObservabilityEndpoint = "https://localhost:9446/icp/observability";
+
+// WebSocket endpoint — shares the main HTTPS port so no separate cert trust is needed
+configurable string backendWsUrl = "wss://localhost:9446/runtime-status";
 
 // Refresh token configuration
 configurable int refreshTokenExpiryTime = 86400; // 1 day (in seconds)

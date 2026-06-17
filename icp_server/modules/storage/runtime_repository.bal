@@ -179,11 +179,37 @@ public isolated function deleteRuntime(string runtimeId) returns error? {
     log:printInfo(string `Successfully deleted runtime ${runtimeId}`);
 }
 
+type StaleRuntimeRow record {|string runtime_id; string environment_id; string environment_name;|};
+
 // Mark runtimes as offline if they haven't sent heartbeat within timeout
 // For K8S deployments, delete OFFLINE runtimes instead of marking them
 public isolated function markOfflineRuntimes() returns error? {
 
     // Use database native timestamp functions for reliable comparison
+
+    // Pre-query stale runtimes before the DELETE/UPDATE so we can publish OFFLINE
+    // events after the operation (for K8S the rows are deleted so we must read first).
+    sql:ParameterizedQuery staleSelectQuery = sql:queryConcat(
+            `SELECT r.runtime_id, r.environment_id, e.name AS environment_name
+        FROM runtimes r
+        JOIN environments e ON r.environment_id = e.environment_id
+        WHERE r.status != 'OFFLINE'
+        AND r.last_heartbeat IS NOT NULL
+        AND `,
+            sqlQueryFromString(getTimestampDiffSeconds("r.last_heartbeat", "CURRENT_TIMESTAMP")),
+            ` > ${heartbeatTimeoutSeconds}`
+    );
+
+    StaleRuntimeRow[] staleRows = [];
+    do {
+        stream<StaleRuntimeRow, sql:Error?> staleStream = dbClient->query(staleSelectQuery);
+        _ = check from StaleRuntimeRow r in staleStream
+            do {
+                staleRows.push(r);
+            };
+    } on fail error e {
+        log:printWarn("Failed to query stale runtimes for event notifications", e);
+    }
 
     if deploymentType == "K8S" {
         // For K8S deployments, delete runtimes that should be marked offline
@@ -218,6 +244,11 @@ public isolated function markOfflineRuntimes() returns error? {
         if affectedCount is int && affectedCount > 0 {
             log:printInfo(string `Successfully marked ${affectedCount} runtime(s) as OFFLINE`);
         }
+    }
+
+    // Notify WebSocket subscribers for each runtime that just went offline
+    foreach StaleRuntimeRow r in staleRows {
+        runtimeBroadcaster.publish(r.environment_id, r.environment_name, r.runtime_id, "OFFLINE");
     }
 }
 

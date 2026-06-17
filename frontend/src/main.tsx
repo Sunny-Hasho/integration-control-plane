@@ -26,6 +26,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { AuthProvider } from './auth/AuthContext';
 import { loadConfig } from './config/api';
 import { AccessControlProvider } from './contexts/AccessControlContext';
+import { NotificationsProvider } from './contexts/NotificationsContext';
 import './index.css';
 
 const queryClient = new QueryClient();
@@ -35,17 +36,19 @@ loadConfig().then(() => {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <OxygenUIThemeProvider themes={[{ key: 'acrylicOrange', label: 'Acrylic Orange Theme', theme: AcrylicOrangeTheme }]} initialTheme="acrylicOrange">
-        <QueryClientProvider client={queryClient}>
-          <BrowserRouter>
-            <AuthProvider>
-              <AccessControlProvider>
-                <ErrorBoundary>
-                  <App />
-                </ErrorBoundary>
-              </AccessControlProvider>
-            </AuthProvider>
-          </BrowserRouter>
-        </QueryClientProvider>
+        <NotificationsProvider>
+          <QueryClientProvider client={queryClient}>
+            <BrowserRouter>
+              <AuthProvider>
+                <AccessControlProvider>
+                  <ErrorBoundary>
+                    <App />
+                  </ErrorBoundary>
+                </AccessControlProvider>
+              </AuthProvider>
+            </BrowserRouter>
+          </QueryClientProvider>
+        </NotificationsProvider>
       </OxygenUIThemeProvider>
     </StrictMode>,
   );

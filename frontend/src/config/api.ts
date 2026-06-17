@@ -26,6 +26,7 @@ interface RuntimeConfig {
   VITE_GRAPHQL_URL?: string;
   VITE_AUTH_BASE_URL?: string;
   VITE_OBSERVABILITY_URL?: string;
+  VITE_WS_URL?: string;
   VITE_SSO_ENABLED?: boolean;
   VITE_ICP_VERSION?: string;
 }
@@ -34,6 +35,7 @@ export interface ApiConfig {
   graphqlUrl: string;
   authBaseUrl: string;
   observabilityUrl: string;
+  wsUrl: string;
   ssoEnabled: boolean;
   version: string;
 }
@@ -50,6 +52,7 @@ const DEFAULT_CONFIG: ApiConfig = {
   graphqlUrl: 'https://localhost:9446/graphql',
   authBaseUrl: 'https://localhost:9446/auth',
   observabilityUrl: 'https://localhost:9446/icp/observability',
+  wsUrl: 'wss://localhost:9446/runtime-status',
   ssoEnabled: false,
   version: '',
 };
@@ -71,6 +74,7 @@ export async function loadConfig(): Promise<void> {
       graphqlUrl: config.VITE_GRAPHQL_URL || DEFAULT_CONFIG.graphqlUrl,
       authBaseUrl: config.VITE_AUTH_BASE_URL || DEFAULT_CONFIG.authBaseUrl,
       observabilityUrl: config.VITE_OBSERVABILITY_URL || DEFAULT_CONFIG.observabilityUrl,
+      wsUrl: config.VITE_WS_URL || DEFAULT_CONFIG.wsUrl,
       ssoEnabled: config.VITE_SSO_ENABLED ?? DEFAULT_CONFIG.ssoEnabled,
       version: config.VITE_ICP_VERSION || DEFAULT_CONFIG.version,
     };

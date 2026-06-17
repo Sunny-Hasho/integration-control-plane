@@ -16,6 +16,7 @@
 
 import ballerina/graphql;
 import ballerina/http;
+import ballerina/log;
 import icp_server.types;
 
 // HTTP error response helpers
@@ -56,6 +57,14 @@ public isolated function initGraphQLContext(http:RequestContext reqCtx, http:Req
     graphql:Context context = new;
     if authorization is string {
         context.set("Authorization", authorization);
+    } else {
+        // Fallback for WebSocket upgrade requests: browsers cannot set custom headers
+        // during the WebSocket handshake, so the JWT is passed as a ?token= query param.
+        string? tokenParam = request.getQueryParamValue("token");
+        log:printDebug("initGraphQLContext WS upgrade", rawPath = request.rawPath, tokenFound = tokenParam is string);
+        if tokenParam is string {
+            context.set("Authorization", "Bearer " + tokenParam);
+        }
     }
     string|http:HeaderNotFoundError xff = request.getHeader("X-Forwarded-For");
     if xff is string {
