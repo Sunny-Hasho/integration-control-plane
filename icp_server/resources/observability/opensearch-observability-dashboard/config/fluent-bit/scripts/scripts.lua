@@ -22,7 +22,13 @@ function preprocess_bal_log(tag, timestamp, record)
     -- Normalise icp.runtimeId → icp_runtimeId before logfmt parsing.
     -- The dot in the key name causes some logfmt parsers to stop at the dot,
     -- dropping the rest of the key name and the value entirely.
-    log = string.gsub(log, " icp%.runtimeId=", " icp_runtimeId=")
+    -- Two passes: once for start-of-line, once for whitespace-prefixed.
+    log = string.gsub(log, "^icp%.runtimeId=", "icp_runtimeId=")
+    log = string.gsub(log, "(%s)icp%.runtimeId=", "%1icp_runtimeId=")
+
+    -- Prepend a sentinel space so the walkers below can use a uniform "%s key={"
+    -- pattern regardless of whether a key appears at the start of the line or not.
+    log = " " .. log
 
     -- Generic bracket/brace walker: extract all key={...} JSON object values.
     local search_pos = 1
@@ -75,6 +81,9 @@ function preprocess_bal_log(tag, timestamp, record)
             search_pos = match_end + 1
         end
     end
+
+    -- Strip the sentinel space added before the walkers.
+    log = string.sub(log, 2)
 
     record["log"] = log
     return 1, timestamp, record
