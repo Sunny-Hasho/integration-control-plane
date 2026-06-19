@@ -58,7 +58,7 @@ const DISPLAY_FIELDS: { key: keyof LogRow; label: string }[] = [
   { key: 'artifactContainer', label: 'Artifact Container' },
   { key: 'product', label: 'Product' },
   { key: 'icpRuntimeId', label: 'Runtime ID' },
-  { key: 'logContext', label: 'Log Context' },
+  { key: 'logAttributes', label: 'Log Attributes' },
   { key: 'componentVersion', label: 'Component Version' },
   { key: 'componentVersionId', label: 'Component Version ID' },
   { key: 'error', label: 'Error' },
@@ -231,7 +231,6 @@ export default function RuntimeLogs(scope: ProjectScope | ComponentScope): JSX.E
 
   const logsRequest = useMemo<LogsRequest | null>(() => {
     if (componentIds.length === 0 || !primaryEnv) return null;
-    const envNames = environments.filter((e) => selectedEnvIds.includes(e.id)).map((e) => e.name);
     let startTime: string;
     let endTime: string;
     if (timePreset === 'custom') {
@@ -247,7 +246,7 @@ export default function RuntimeLogs(scope: ProjectScope | ComponentScope): JSX.E
     return {
       componentIdList: componentIds,
       environmentId: primaryEnv.id,
-      environmentList: envNames,
+      environmentList: selectedEnvIds,
       logLevels: levelFilter,
       startTime,
       endTime,

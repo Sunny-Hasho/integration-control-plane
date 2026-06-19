@@ -1,40 +1,82 @@
 -- Enhanced Lua Scripts for Fluent Bit - Ballerina Focus
 -- scripts/scripts.lua
 
--- Extract unquoted error JSON from the raw log line before logfmt parsing.
--- Without this, the logfmt parser splits the JSON on spaces/equals into garbage
--- keys and the inner "message" key overwrites the actual log message.
--- Uses a brace walker that respects quoted strings so that } inside a string
--- value does not prematurely terminate the match.
+-- Pre-process the raw Ballerina log line before logfmt parsing.
+--
+-- logfmt cannot handle two value types that Ballerina logging produces:
+--   1. JSON objects:  key={...}   e.g. error={...}
+--   2. JSON arrays:   key=[...]   e.g. loggerIds=[...]
+-- Embedded quotes and spaces inside those values corrupt the logfmt parse and
+-- cause the field AND every field that follows it to be dropped.
+--
+-- This function extracts all such values directly into the record and removes
+-- them from the log string so the logfmt parser only ever sees plain
+-- key=value and key="quoted value" pairs.
+--
+-- It also normalises the icp.runtimeId key (dot → underscore) because many
+-- logfmt implementations treat '.' as a key terminator.
 function preprocess_bal_log(tag, timestamp, record)
     local log = record["log"]
     if not log then return 0, timestamp, record end
 
-    local error_start = string.find(log, " error={", 1, true)
-    if not error_start then return 1, timestamp, record end
+    -- Normalise icp.runtimeId → icp_runtimeId before logfmt parsing.
+    -- The dot in the key name causes some logfmt parsers to stop at the dot,
+    -- dropping the rest of the key name and the value entirely.
+    log = string.gsub(log, " icp%.runtimeId=", " icp_runtimeId=")
 
-    local depth, in_str, escape, json_end = 0, false, false, nil
-    for i = error_start + 7, #log do
-        local c = string.sub(log, i, i)
-        if escape then
-            escape = false
-        elseif in_str then
-            if c == "\\" then escape = true elseif c == '"' then in_str = false end
-        elseif c == '"' then
-            in_str = true
-        elseif c == "{" then
-            depth = depth + 1
-        elseif c == "}" then
-            depth = depth - 1
-            if depth == 0 then json_end = i break end
+    -- Generic bracket/brace walker: extract all key={...} JSON object values.
+    local search_pos = 1
+    while search_pos <= #log do
+        local match_start, match_end, key = string.find(log, "%s([%w_%.%-]+)=%{", search_pos)
+        if not match_start then break end
+        local depth, in_str, escape, val_end = 0, false, false, nil
+        for i = match_end, #log do
+            local c = string.sub(log, i, i)
+            if escape then escape = false
+            elseif in_str then
+                if c == "\\" then escape = true elseif c == '"' then in_str = false end
+            elseif c == '"' then in_str = true
+            elseif c == "{" then depth = depth + 1
+            elseif c == "}" then
+                depth = depth - 1
+                if depth == 0 then val_end = i break end
+            end
+        end
+        if val_end then
+            record[key] = string.sub(log, match_end, val_end)
+            log = string.sub(log, 1, match_start - 1) .. string.sub(log, val_end + 1)
+        else
+            search_pos = match_end + 1
         end
     end
 
-    if json_end then
-        record["error"] = string.sub(log, error_start + 7, json_end)
-        record["log"] = string.sub(log, 1, error_start - 1) .. string.sub(log, json_end + 1)
+    -- Generic bracket walker: extract all key=[...] JSON array values.
+    search_pos = 1
+    while search_pos <= #log do
+        local match_start, match_end, key = string.find(log, "%s([%w_%.%-]+)=%[", search_pos)
+        if not match_start then break end
+        local depth, in_str, escape, val_end = 0, false, false, nil
+        for i = match_end, #log do
+            local c = string.sub(log, i, i)
+            if escape then escape = false
+            elseif in_str then
+                if c == "\\" then escape = true elseif c == '"' then in_str = false end
+            elseif c == '"' then in_str = true
+            elseif c == "[" then depth = depth + 1
+            elseif c == "]" then
+                depth = depth - 1
+                if depth == 0 then val_end = i break end
+            end
+        end
+        if val_end then
+            record[key] = string.sub(log, match_end, val_end)
+            log = string.sub(log, 1, match_start - 1) .. string.sub(log, val_end + 1)
+        else
+            search_pos = match_end + 1
+        end
     end
 
+    record["log"] = log
     return 1, timestamp, record
 end
 

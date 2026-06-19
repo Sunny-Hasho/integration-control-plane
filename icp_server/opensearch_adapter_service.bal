@@ -33,7 +33,7 @@ const int COL_DEPLOYMENT = 9;
 const int COL_ARTIFACT_CONTAINER = 10;
 const int COL_PRODUCT = 11;
 const int COL_ICP_RUNTIME_ID = 12;
-const int COL_LOG_CONTEXT = 13;
+const int COL_LOG_ATTRIBUTES = 13;
 const int COL_COMPONENT_VERSION = 14;
 const int COL_COMPONENT_VERSION_ID = 15;
 const int COL_ERROR = 16;
@@ -72,6 +72,18 @@ type LogSource record {
     string? 'class?;
     string? traceId?;
     json? 'error?;
+};
+
+// Fields added by Fluent Bit, the ICP agent, or the Ballerina runtime itself.
+// Any field from OpenSearch NOT in this set is treated as a user-defined
+// key-value pair and surfaced in the log entry string and LogAttributes column.
+final readonly & map<boolean> SYSTEM_LOG_FIELD_SET = {
+    "@timestamp": true, "time": true, "level": true, "message": true,
+    "module": true, "service_type": true, "product": true, "icp_runtimeId": true,
+    "deployment": true, "app": true, "app_name": true, "app_module": true,
+    "log_file_path": true, "log": true, "doc_id": true, "logger": true,
+    "error": true, "traceId": true, "spanId": true,
+    "artifact_container": true, "class": true, "src_module": true
 };
 
 type OpenSearchHit record {
@@ -197,7 +209,7 @@ service /observability on openSerachObservabilityListener {
             {name: "ArtifactContainer", 'type: "dynamic"},
             {name: "Product", 'type: "dynamic"},
             {name: "IcpRuntimeId", 'type: "dynamic"},
-            {name: "LogContext", 'type: "dynamic"},
+            {name: "LogAttributes", 'type: "dynamic"},
             {name: "ComponentVersion", 'type: "string"},
             {name: "ComponentVersionId", 'type: "string"},
             {name: "Error", 'type: "dynamic"}
@@ -230,8 +242,21 @@ service /observability on openSerachObservabilityListener {
             string rawMessage = sourceData?.message ?: "";
             string rawTime = sourceData?.time ?: timestamp;
 
-            // Construct the full log entry string
-            string logEntry = constructLogEntry(sourceData);
+            // Collect user-defined key-value pairs: every field from OpenSearch
+            // that is not in the infrastructure/system field set.
+            map<json> extraFields = {};
+            json srcJson = sourceData.toJson();
+            if srcJson is map<json> {
+                foreach var [key, value] in srcJson.entries() {
+                    if !SYSTEM_LOG_FIELD_SET.hasKey(key) && !(value is ()) {
+                        extraFields[key] = value;
+                    }
+                }
+            }
+            json logAttributes = extraFields.length() > 0 ? extraFields.toJson() : ();
+
+            // Construct the full log entry string including user-defined fields
+            string logEntry = constructLogEntry(sourceData, extraFields);
 
             json[] row = [
                 timestamp, // COL_TIMESTAMP (0)
@@ -247,7 +272,7 @@ service /observability on openSerachObservabilityListener {
                 artifactContainer, // COL_ARTIFACT_CONTAINER (10)
                 product, // COL_PRODUCT (11)
                 icpRuntimeId, // COL_ICP_RUNTIME_ID (12)
-                (), // COL_LOG_CONTEXT (13) - null for now
+                logAttributes, // COL_LOG_ATTRIBUTES (13)
                 "", // COL_COMPONENT_VERSION (14)
                 "", // COL_COMPONENT_VERSION_ID (15)
                 errorData, // COL_ERROR (16)
@@ -741,8 +766,9 @@ function buildLogQuery(types:LogEntryRequest logRequest) returns json {
     };
 }
 
-// Helper function to construct log entry string from OpenSearch document
-function constructLogEntry(LogSource sourceData) returns string {
+// Helper function to construct log entry string from OpenSearch document.
+// extraFields contains user-defined key-value pairs extracted from the document.
+function constructLogEntry(LogSource sourceData, map<json> extraFields) returns string {
     string time = sourceData?.time ?: "";
     string level = sourceData?.level ?: "";
     string message = sourceData?.message ?: "";
@@ -760,7 +786,7 @@ function constructLogEntry(LogSource sourceData) returns string {
 
     // Service-type specific fields
     string serviceSpecificFields = "";
-    if serviceType == "ballerina" {
+    if serviceType == "ballerina" || serviceType == "bi" {
         string? moduleValue = sourceData?.module;
         string module = moduleValue is string && moduleValue != "" ? " module=\"" + moduleValue + "\"" : "";
 
@@ -775,8 +801,27 @@ function constructLogEntry(LogSource sourceData) returns string {
         serviceSpecificFields = artifactContainer;
     }
 
+    // Append user-defined key-value pairs in logfmt style.
+    // String values that look like JSON objects/arrays are emitted unquoted so
+    // the output matches the original Ballerina log format.
+    string extraPairs = "";
+    foreach var [key, value] in extraFields.entries() {
+        string valueStr;
+        if value is string {
+            string v = value;
+            if v.startsWith("{") || v.startsWith("[") {
+                valueStr = v;
+            } else {
+                valueStr = string `"${v}"`;
+            }
+        } else {
+            valueStr = value.toJsonString();
+        }
+        extraPairs += string ` ${key}=${valueStr}`;
+    }
+
     // Construct the log entry in logfmt style
-    return string `time=${time} level=${level}${serviceSpecificFields} message="${message}"${traceId}${spanId}${runtimeId}`;
+    return string `time=${time} level=${level}${serviceSpecificFields} message="${message}"${traceId}${spanId}${runtimeId}${extraPairs}`;
 }
 
 // Helper function to deduplicate log entries based on composite key
