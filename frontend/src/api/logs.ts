@@ -30,7 +30,7 @@ export interface LogRow {
   artifactContainer: string | null;
   product: string | null;
   icpRuntimeId: string | null;
-  logContext: unknown;
+  logAttributes: unknown;
   componentVersion: string;
   componentVersionId: string;
   error: unknown | null;
@@ -55,7 +55,7 @@ const COLUMN_MAP: Record<string, keyof LogRow> = {
   ArtifactContainer: 'artifactContainer',
   Product: 'product',
   IcpRuntimeId: 'icpRuntimeId',
-  LogContext: 'logContext',
+  LogAttributes: 'logAttributes',
   ComponentVersion: 'componentVersion',
   ComponentVersionId: 'componentVersionId',
   Error: 'error',
