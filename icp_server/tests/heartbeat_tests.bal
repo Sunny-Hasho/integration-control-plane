@@ -31,11 +31,10 @@ const string HB_ENV_ID = "750e8400-e29b-41d4-a716-446655440001";
 const string HB_REPLICA1_ID = "aa000001-test-test-test-000000000001";
 const string HB_REPLICA2_ID = "aa000001-test-test-test-000000000002";
 const string HB_REPLICA3_ID = "aa000001-test-test-test-000000000003";
-const string HB_RESTART_NEW_ID = "aa000001-test-test-test-000000000004";
-
-// Offline Runtime 3 from seed data — used as the pre-existing OFFLINE record in the restart test.
-const string HB_SEEDED_OFFLINE_ID = "880e8400-e29b-41d4-a716-446655440003";
-const string HB_SEEDED_OFFLINE_NAME = "sample-integration-2-dev-runtime";
+// Restart test: dedicated IDs/name that do not overlap with any seeded runtime.
+const string HB_RESTART_OLD_ID = "aa000001-test-test-test-000000000007";
+const string HB_RESTART_NEW_ID = "aa000001-test-test-test-000000000008";
+const string HB_RESTART_NAME = "hb-restart-test-unique-runtime";
 
 // =============================================================================
 // Helpers
@@ -142,32 +141,28 @@ function testFiveReplicasNullNamesAllSurvive() returns error? {
 // =============================================================================
 // Test 3: VM restart — an OFFLINE record with the same name must be cleaned up
 //
-// Uses the seeded OFFLINE Runtime 3 (HB_SEEDED_OFFLINE_ID) as the "old instance".
-// After this test that runtime no longer exists; this test therefore depends on no
-// other test needing Runtime 3, and is placed in a separate "heartbeat-restart" group.
-// If Runtime 3 is needed elsewhere, run this group in isolation.
+// Self-contained: seeds a dedicated OFFLINE runtime (HB_RESTART_OLD_ID / HB_RESTART_NAME)
+// that is unrelated to any other test's data, so this test is order-independent.
 // =============================================================================
 @test:Config {
     groups: ["heartbeat", "heartbeat-restart"]
 }
 function testVmRestartCleansUpOfflineRecord() returns error? {
+    cleanupRuntime(HB_RESTART_OLD_ID);
     cleanupRuntime(HB_RESTART_NEW_ID);
 
-    // Pre-condition: seeded OFFLINE runtime must exist.
-    types:Runtime? offlineRuntime = check storage:getRuntimeById(HB_SEEDED_OFFLINE_ID);
-    if offlineRuntime is () {
-        // If it was already cleaned up by a previous run, fail with a clear message.
-        test:assertFail("Pre-condition failed: seeded OFFLINE runtime not found. " +
-                "Re-seed the test database before running the heartbeat-restart group.");
-    }
+    // Seed the "old" runtime as RUNNING first, then mark it OFFLINE to simulate a stale instance.
+    _ = check storage:processHeartbeat(
+            buildHeartbeat(HB_RESTART_OLD_ID, HB_RESTART_NAME), preResolved = true);
+    check storage:updateRuntimeStatus(HB_RESTART_OLD_ID, "OFFLINE");
 
     // New instance comes up with the same name but a fresh UUID.
     types:HeartbeatResponse resp = check storage:processHeartbeat(
-            buildHeartbeat(HB_RESTART_NEW_ID, HB_SEEDED_OFFLINE_NAME), preResolved = true);
+            buildHeartbeat(HB_RESTART_NEW_ID, HB_RESTART_NAME), preResolved = true);
     test:assertTrue(resp.acknowledged, "New instance heartbeat should be acknowledged");
 
     // Old OFFLINE record must have been cleaned up.
-    types:Runtime? oldRecord = check storage:getRuntimeById(HB_SEEDED_OFFLINE_ID);
+    types:Runtime? oldRecord = check storage:getRuntimeById(HB_RESTART_OLD_ID);
     test:assertEquals(oldRecord, (), "Old OFFLINE record must be deleted after restart");
 
     // New runtime must exist.
