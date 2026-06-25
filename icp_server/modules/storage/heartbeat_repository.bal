@@ -535,17 +535,19 @@ isolated function upsertRuntime(types:Heartbeat heartbeat) returns string?|error
     string runtimeHostname = heartbeat.runtimeHostname ?: "";
     string runtimePort = heartbeat.runtimePort ?: "";
 
-    // Check if a runtime with the same component/env/name but different ID exists (ID change scenario)
+    // Check if a stale OFFLINE runtime with the same component/env/name but different ID exists.
+    // Restricting to OFFLINE prevents live sibling replicas in multi-replica deployments from
+    // being mistakenly treated as "old restarted instances" and deleted.
     stream<record {|string runtime_id;|}, sql:Error?> existingByName;
     if runtimeName is string {
         existingByName = dbClient->query(`
             SELECT runtime_id FROM runtimes
-            WHERE component_id = ${heartbeat.component} AND environment_id = ${heartbeat.environment} AND name = ${runtimeName}
+            WHERE component_id = ${heartbeat.component} AND environment_id = ${heartbeat.environment} AND name = ${runtimeName} AND status = 'OFFLINE'
         `);
     } else {
         existingByName = dbClient->query(`
             SELECT runtime_id FROM runtimes
-            WHERE component_id = ${heartbeat.component} AND environment_id = ${heartbeat.environment} AND name IS NULL
+            WHERE component_id = ${heartbeat.component} AND environment_id = ${heartbeat.environment} AND name IS NULL AND status = 'OFFLINE'
         `);
     }
     record {|string runtime_id;|}[] existingByNameRows = check from record {|string runtime_id;|} r in existingByName

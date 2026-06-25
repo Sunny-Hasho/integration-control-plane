@@ -162,6 +162,15 @@ public isolated function getRuntimeTypeById(string runtimeId) returns types:Runt
 }
 
 // Delete a runtime by ID
+public isolated function updateRuntimeStatus(string runtimeId, string status) returns error? {
+    sql:ExecutionResult|sql:Error result = dbClient->execute(
+        `UPDATE runtimes SET status = ${status} WHERE runtime_id = ${runtimeId}`
+    );
+    if result is sql:Error {
+        return error(string `Failed to update status for runtime ${runtimeId}`, result);
+    }
+}
+
 public isolated function deleteRuntime(string runtimeId) returns error? {
     sql:ParameterizedQuery deleteQuery = `DELETE FROM runtimes WHERE runtime_id = ${runtimeId}`;
     var result = dbClient->execute(deleteQuery);
