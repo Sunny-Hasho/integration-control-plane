@@ -69,7 +69,7 @@ const routes: AppRoute[] = [
       { path: privacyPolicyUrl(), element: <PrivacyPolicy /> },
     ],
   },
-  { path: '/auth/callback', element: <OIDCCallback /> },
+  { path: '/sso/callback', element: <OIDCCallback /> },
   {
     element: <ProtectedRoute />,
     children: [

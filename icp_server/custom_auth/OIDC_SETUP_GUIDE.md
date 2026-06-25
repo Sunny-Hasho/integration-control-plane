@@ -22,7 +22,7 @@ Before configuring ICP:
 
 1. **OIDC Application registered** with your identity provider
 2. **Client ID and Client Secret** from your identity provider
-3. **Redirect URI configured** in your identity provider to point to: `https://your-icp-domain.com/auth/callback`
+3. **Redirect URI configured** in your identity provider to point to: `https://your-icp-domain.com/sso/callback`
 4. **Required claims** enabled in your identity provider:
    - `sub` (Subject/User ID) - Required
    - `email` OR `preferred_username` - Required
@@ -62,7 +62,7 @@ ssoTokenEndpoint = "https://your-provider.com/oauth2/token"
 ssoLogoutEndpoint = "https://your-provider.com/oauth2/logout"
 ssoClientId = "your-client-id"
 ssoClientSecret = "your-client-secret"
-ssoRedirectUri = "https://your-icp-domain.com/auth/callback"
+ssoRedirectUri = "https://your-icp-domain.com/sso/callback"
 ssoUsernameClaim = "email"
 ssoScopes = ["openid", "email", "profile"]
 ```
@@ -80,7 +80,7 @@ ssoScopes = ["openid", "email", "profile"]
 | `ssoLogoutEndpoint` | Logout endpoint URL | `https://provider.com/oauth2/logout` |
 | `ssoClientId` | Your application's Client ID | `abc123xyz` |
 | `ssoClientSecret` | Your application's Client Secret | `secret_key` |
-| `ssoRedirectUri` | Callback URL (must match provider config) | `https://your-domain.com/auth/callback` |
+| `ssoRedirectUri` | Callback URL (must match provider config) | `https://your-domain.com/sso/callback` |
 | `ssoUsernameClaim` | Claim to use as username: `email` or `preferred_username` | `email` |
 | `ssoScopes` | OIDC scopes to request (minimum: `openid`) | `["openid", "email", "profile"]` |
 
@@ -98,7 +98,7 @@ ssoTokenEndpoint = "https://api.asgardeo.io/t/YOUR_ORG/oauth2/token"
 ssoLogoutEndpoint = "https://api.asgardeo.io/t/YOUR_ORG/oidc/logout"
 ssoClientId = "your-client-id"
 ssoClientSecret = "your-client-secret"
-ssoRedirectUri = "https://your-icp-domain.com/auth/callback"
+ssoRedirectUri = "https://your-icp-domain.com/sso/callback"
 ssoUsernameClaim = "email"
 ssoScopes = ["openid", "email", "profile"]
 ```
@@ -113,7 +113,7 @@ ssoTokenEndpoint = "https://YOUR_DOMAIN.okta.com/oauth2/default/v1/token"
 ssoLogoutEndpoint = "https://YOUR_DOMAIN.okta.com/oauth2/default/v1/logout"
 ssoClientId = "your-client-id"
 ssoClientSecret = "your-client-secret"
-ssoRedirectUri = "https://your-icp-domain.com/auth/callback"
+ssoRedirectUri = "https://your-icp-domain.com/sso/callback"
 ssoUsernameClaim = "email"
 ssoScopes = ["openid", "email", "profile"]
 ```
@@ -128,7 +128,7 @@ ssoTokenEndpoint = "https://YOUR_DOMAIN.auth0.com/oauth/token"
 ssoLogoutEndpoint = "https://YOUR_DOMAIN.auth0.com/v2/logout"
 ssoClientId = "your-client-id"
 ssoClientSecret = "your-client-secret"
-ssoRedirectUri = "https://your-icp-domain.com/auth/callback"
+ssoRedirectUri = "https://your-icp-domain.com/sso/callback"
 ssoUsernameClaim = "email"
 ssoScopes = ["openid", "email", "profile"]
 ```
@@ -143,7 +143,7 @@ ssoTokenEndpoint = "https://login.microsoftonline.com/YOUR_TENANT_ID/oauth2/v2.0
 ssoLogoutEndpoint = "https://login.microsoftonline.com/YOUR_TENANT_ID/oauth2/v2.0/logout"
 ssoClientId = "your-client-id"
 ssoClientSecret = "your-client-secret"
-ssoRedirectUri = "https://your-icp-domain.com/auth/callback"
+ssoRedirectUri = "https://your-icp-domain.com/sso/callback"
 ssoUsernameClaim = "email"
 ssoScopes = ["openid", "email", "profile"]
 ```
@@ -158,7 +158,7 @@ ssoTokenEndpoint = "https://YOUR_KEYCLOAK_DOMAIN/realms/YOUR_REALM/protocol/open
 ssoLogoutEndpoint = "https://YOUR_KEYCLOAK_DOMAIN/realms/YOUR_REALM/protocol/openid-connect/logout"
 ssoClientId = "your-client-id"
 ssoClientSecret = "your-client-secret"
-ssoRedirectUri = "https://your-icp-domain.com/auth/callback"
+ssoRedirectUri = "https://your-icp-domain.com/sso/callback"
 ssoUsernameClaim = "preferred_username"
 ssoScopes = ["openid", "email", "profile"]
 ```

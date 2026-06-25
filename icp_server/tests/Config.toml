@@ -43,7 +43,7 @@ ssoLogoutEndpoint = "http://localhost:9458/oauth2/logout"
 ssoJwksUrl = "http://localhost:9458/oauth2/jwks"
 ssoClientId = "test-client-id"
 ssoClientSecret = "test-client-secret"
-ssoRedirectUri = "http://localhost:3000/auth/callback"
+ssoRedirectUri = "http://localhost:3000/sso/callback"
 ssoUsernameClaim = "email"
 ssoScopes = ["openid", "email", "profile"]
 
