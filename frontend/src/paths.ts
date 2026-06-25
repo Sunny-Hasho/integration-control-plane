@@ -8,7 +8,7 @@ export function loginUrl(): string {
 }
 
 export function oidcCallbackUrl(): string {
-  return '/auth/callback';
+  return '/sso/callback';
 }
 
 export function profileUrl(): string {
