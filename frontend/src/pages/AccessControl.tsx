@@ -21,7 +21,7 @@ import { useEffect, type JSX } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { useAccessControl } from '../contexts/AccessControlContext';
 import { ALL_USER_MGT_PERMISSIONS, Permissions } from '../constants/permissions';
-import { componentAccessControlUrl } from '../paths';
+import { componentAccessControlUrl, componentUrl } from '../paths';
 import { useProjectByHandler, useComponentByHandler } from '../api/queries';
 import type { ComponentScope } from '../nav';
 import { Loading } from './access-control/shared';
@@ -161,7 +161,7 @@ export function ComponentAccessControl({ org, project, component }: ComponentSco
 
   useEffect(() => {
     if (!loadingProject && !loadingComponent && componentId && !canSeeAccessControl) {
-      navigate(`/organizations/${org}/projects/${project}/integrations/${component}`);
+      navigate(componentUrl(org, project, component));
     }
   }, [canSeeAccessControl, loadingProject, loadingComponent, componentId, navigate, org, project, component]);
 
