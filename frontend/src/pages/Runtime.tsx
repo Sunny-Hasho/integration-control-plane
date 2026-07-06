@@ -217,7 +217,7 @@ function BoundSecretDrawer({ componentId, environmentId, environmentName, onClos
           <CircularProgress sx={{ mx: 'auto', my: 4 }} />
         ) : secrets.length === 0 ? (
           <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
-            No bound secrets for this integration in this environment.
+            No secrets for this integration in this environment.
           </Typography>
         ) : (
           <Box sx={{ width: '100%', overflowX: 'auto' }}>
